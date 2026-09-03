@@ -12,6 +12,7 @@ class MobileJoystick extends Control:
     var deadzone := 0.12
     var value := Vector2.ZERO
     var active := false
+    var touch_id := -1
 
     func _ready() -> void:
         mouse_filter = Control.MOUSE_FILTER_STOP
@@ -19,19 +20,28 @@ class MobileJoystick extends Control:
 
     func _gui_input(event: InputEvent) -> void:
         if event is InputEventScreenTouch:
-            if event.pressed:
+            if event.pressed and not active:
                 active = true
+                touch_id = event.index
                 _update_value(event.position)
                 accept_event()
-            elif active:
-                active = false
-                value = Vector2.ZERO
-                value_changed.emit(value)
-                queue_redraw()
+            elif not event.pressed and active and event.index == touch_id:
+                _reset()
                 accept_event()
-        elif event is InputEventScreenDrag and active:
+        elif event is InputEventScreenDrag and active and event.index == touch_id:
             _update_value(event.position)
             accept_event()
+
+    func _reset() -> void:
+        active = false
+        touch_id = -1
+        value = Vector2.ZERO
+        value_changed.emit(value)
+        queue_redraw()
+
+    func force_reset() -> void:
+        if active or value != Vector2.ZERO:
+            _reset()
 
     func _update_value(local_position: Vector2) -> void:
         var center := size * 0.5
@@ -98,6 +108,8 @@ var crouch_button: Button
 var jump_button: Button
 var slide_button: Button
 var aim_button: Button
+var fire_button: Button
+var reload_button: Button
 
 func _ready() -> void:
     camera = Camera3D.new()
@@ -150,8 +162,16 @@ func _layout_mobile_controls() -> void:
     slide_button.size = Vector2(action_w, 48.0 * scale_factor)
     jump_button.position = Vector2(sprint_button.position.x + action_w + 12.0 * scale_factor, sprint_button.position.y)
     jump_button.size = Vector2(action_w, action_h * 2.15)
-    aim_button.position = Vector2(size.x - 150.0 * scale_factor - pad, size.y - 195.0 * scale_factor - pad)
-    aim_button.size = Vector2(150.0 * scale_factor, 70.0 * scale_factor)
+
+    var right_pad := 24.0 * scale_factor
+    var fire_size := 112.0 * scale_factor
+    fire_button.position = Vector2(size.x - fire_size - right_pad, size.y - fire_size - right_pad)
+    fire_button.size = Vector2(fire_size, fire_size)
+    aim_button.position = Vector2(size.x - 150.0 * scale_factor - right_pad, fire_button.position.y - 78.0 * scale_factor)
+    aim_button.size = Vector2(150.0 * scale_factor, 64.0 * scale_factor)
+    reload_button.position = Vector2(fire_button.position.x - 96.0 * scale_factor, fire_button.position.y + 8.0 * scale_factor)
+    reload_button.size = Vector2(84.0 * scale_factor, 52.0 * scale_factor)
+
     if damage_overlay != null:
         damage_overlay.size = size
     if critical_label != null:
@@ -205,6 +225,13 @@ func _create_weapon_mesh() -> void:
     weapon.position = Vector3(0.35, -0.25, -0.65)
     camera.add_child(weapon)
 
+func _configure_button(button: Button, text: String) -> void:
+    button.text = text
+    button.focus_mode = Control.FOCUS_NONE
+    button.mouse_filter = Control.MOUSE_FILTER_STOP
+    button.add_theme_font_size_override("font_size", 18)
+    mobile_controls.add_child(button)
+
 func _create_mobile_movement_controls() -> void:
     mobile_controls = CanvasLayer.new()
     mobile_controls.name = "MobileMovementControls"
@@ -217,53 +244,75 @@ func _create_mobile_movement_controls() -> void:
     mobile_controls.add_child(move_joystick)
 
     sprint_button = Button.new()
-    sprint_button.text = "KOŞ"
+    _configure_button(sprint_button, "KOŞ")
     sprint_button.button_down.connect(func(): sprint_pressed = true)
     sprint_button.button_up.connect(func(): sprint_pressed = false)
-    mobile_controls.add_child(sprint_button)
 
     crouch_button = Button.new()
-    crouch_button.text = "ÇÖMEL"
+    _configure_button(crouch_button, "ÇÖMEL")
     crouch_button.button_down.connect(func(): crouch_pressed = true)
     crouch_button.button_up.connect(func(): crouch_pressed = false)
-    mobile_controls.add_child(crouch_button)
 
     jump_button = Button.new()
-    jump_button.text = "ZIPLA"
+    _configure_button(jump_button, "ZIPLA")
     jump_button.pressed.connect(func(): jump_pressed = true)
-    mobile_controls.add_child(jump_button)
 
     slide_button = Button.new()
-    slide_button.text = "KAY"
+    _configure_button(slide_button, "KAY")
     slide_button.pressed.connect(func(): slide_pressed = true)
-    mobile_controls.add_child(slide_button)
 
     aim_button = Button.new()
-    aim_button.text = "NİŞAN"
+    _configure_button(aim_button, "NİŞAN")
     aim_button.button_down.connect(func(): aim_pressed = true)
     aim_button.button_up.connect(func(): aim_pressed = false)
-    mobile_controls.add_child(aim_button)
+
+    fire_button = Button.new()
+    _configure_button(fire_button, "ATEŞ")
+    fire_button.button_down.connect(func(): touch_fire = true)
+    fire_button.button_up.connect(func(): touch_fire = false)
+
+    reload_button = Button.new()
+    _configure_button(reload_button, "DOLDUR")
+    reload_button.pressed.connect(func(): reload())
 
 func _unhandled_input(event: InputEvent) -> void:
     if event is InputEventMouseMotion:
         _apply_look(event.relative)
     elif event is InputEventScreenTouch:
-        if event.pressed and event.position.x > _viewport_size().x * 0.34:
-            look_touch_id = event.index
-            look_last = event.position
-        elif not event.pressed and event.index == look_touch_id:
+        if event.pressed:
+            if event.position.x > _viewport_size().x * 0.34 and look_touch_id == -1:
+                look_touch_id = event.index
+                look_last = event.position
+        elif event.index == look_touch_id:
             look_touch_id = -1
+            look_last = Vector2.ZERO
     elif event is InputEventScreenDrag and event.index == look_touch_id:
         var drag_delta: Vector2 = event.position - look_last
         look_last = event.position
         _apply_look(drag_delta)
-    elif event is InputEventKey and event.pressed:
+
+    if event is InputEventKey and event.pressed:
         if event.keycode == KEY_1:
             equip_weapon("TAARRUZ TÜFEĞİ")
         elif event.keycode == KEY_2:
             equip_weapon("HAFİF MAKİNELİ")
         elif event.keycode == KEY_3:
             equip_weapon("KESKİN NİŞANCI")
+
+func _input(event: InputEvent) -> void:
+    if event is InputEventScreenTouch and not event.pressed:
+        if event.index == look_touch_id:
+            look_touch_id = -1
+            look_last = Vector2.ZERO
+        # Defensive release: prevents a stuck combat button after an interrupted touch.
+        if not fire_button.get_global_rect().has_point(event.position):
+            touch_fire = false
+        if not aim_button.get_global_rect().has_point(event.position):
+            aim_pressed = false
+        if not sprint_button.get_global_rect().has_point(event.position):
+            sprint_pressed = false
+        if not crouch_button.get_global_rect().has_point(event.position):
+            crouch_pressed = false
 
 func _apply_look(delta: Vector2) -> void:
     rotation.y -= delta.x * look_sensitivity
