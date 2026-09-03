@@ -12,8 +12,14 @@ const UpdateManager = preload("res://scripts/update_manager.gd")
 func _init() -> void:
     var failures: Array[String] = []
 
-    if UpdateManager.CURRENT_VERSION != "0.1.5":
-        failures.append("Güncelleme yöneticisi sürümü beklenmeyen değerde")
+    var version_parts := UpdateManager.CURRENT_VERSION.split(".")
+    if version_parts.size() != 3:
+        failures.append("Güncelleme yöneticisi sürüm formatı geçersiz: %s" % UpdateManager.CURRENT_VERSION)
+    else:
+        for part in version_parts:
+            if not str(part).is_valid_int():
+                failures.append("Güncelleme yöneticisi sürümü sayısal değil: %s" % UpdateManager.CURRENT_VERSION)
+                break
 
     var operations: Array = OperationData.get_operations("Türkiye")
     if operations.size() < 3:
