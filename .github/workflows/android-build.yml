@@ -106,6 +106,10 @@ jobs:
           test -d "$ANDROID_SDK_ROOT/cmake/3.10.2.4988404"
           echo "Godot 4.3 Android export configuration validated."
 
+      - name: Gameplay smoke test
+        run: |
+          godot --headless --path . --script res://scripts/ci_smoke_test.gd
+
       - name: Build debug APK
         run: |
           mkdir -p build
