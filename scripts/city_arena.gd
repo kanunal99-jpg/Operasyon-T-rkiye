@@ -8,6 +8,8 @@ var theme := "urban"
 var seed_value := 1
 var enemy_spawn_positions: Array[Vector3] = []
 var objective_position := Vector3(0, 1, -18)
+var objective_radius := 4.5
+var objective_zone: Area3D
 
 func configure(country_name: String, city_name: String, operation_name: String) -> void:
     country = country_name
@@ -31,9 +33,24 @@ func get_enemy_spawn_positions() -> Array[Vector3]:
 func get_objective_position() -> Vector3:
     return objective_position
 
+func is_inside_objective(point: Vector3) -> bool:
+    var flat_point := Vector3(point.x, objective_position.y, point.z)
+    return flat_point.distance_to(objective_position) <= objective_radius
+
+func get_objective_radius() -> float:
+    return objective_radius
+
+func set_objective_active(active: bool) -> void:
+    if not is_instance_valid(objective_zone):
+        return
+    var marker := objective_zone.get_node_or_null("ZoneVisual") as MeshInstance3D
+    if marker != null:
+        marker.visible = active
+
 func _clear_generated() -> void:
     enemy_spawn_positions.clear()
     objective_position = Vector3(0, 1, -18)
+    objective_zone = null
     for child in get_children():
         child.queue_free()
 
@@ -91,16 +108,25 @@ func _add_landmarks() -> void:
         _add_box("MissionBlock", Vector3(0, 3, -27), Vector3(18, 6, 10), Color("#686d6c"), true)
 
 func _add_objective() -> void:
+    objective_zone = Area3D.new()
+    objective_zone.name = "MissionObjectiveZone"
+    objective_zone.position = objective_position
+    var shape_node := CollisionShape3D.new()
+    var sphere := SphereShape3D.new()
+    sphere.radius = objective_radius
+    shape_node.shape = sphere
+    objective_zone.add_child(shape_node)
     var marker := MeshInstance3D.new()
-    marker.name = "MissionObjective"
+    marker.name = "ZoneVisual"
     var mesh := CylinderMesh.new()
-    mesh.top_radius = 0.7
-    mesh.bottom_radius = 0.7
-    mesh.height = 2.0
+    mesh.top_radius = objective_radius
+    mesh.bottom_radius = objective_radius
+    mesh.height = 0.06
     marker.mesh = mesh
-    marker.position = objective_position
+    marker.position.y = -0.97
     marker.material_override = _material(Color("#d9a441"), true)
-    add_child(marker)
+    objective_zone.add_child(marker)
+    add_child(objective_zone)
 
 func _add_spawn_markers() -> void:
     enemy_spawn_positions = [
