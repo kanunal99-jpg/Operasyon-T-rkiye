@@ -78,6 +78,7 @@ var sprint_pressed := false
 var crouch_pressed := false
 var jump_pressed := false
 var slide_pressed := false
+var aim_pressed := false
 var slide_timer := 0.0
 var stand_height := 1.8
 var crouch_height := 1.15
@@ -176,6 +177,14 @@ func _create_mobile_movement_controls() -> void:
     slide.pressed.connect(func(): slide_pressed = true)
     controls.add_child(slide)
 
+    var aim := Button.new()
+    aim.text = "NİŞAN"
+    aim.position = Vector2(1080, 455)
+    aim.size = Vector2(150, 70)
+    aim.button_down.connect(func(): aim_pressed = true)
+    aim.button_up.connect(func(): aim_pressed = false)
+    controls.add_child(aim)
+
 func _unhandled_input(event: InputEvent) -> void:
     if event is InputEventMouseMotion:
         _apply_look(event.relative)
@@ -244,6 +253,10 @@ func _physics_process(delta: float) -> void:
         velocity.y = 0.0
 
     move_and_slide()
+
+    camera.fov = lerpf(camera.fov, 62.0 if aim_pressed else 78.0, minf(1.0, delta * 12.0))
+    var sensitivity_target := 0.0025 if aim_pressed else 0.004
+    look_sensitivity = lerpf(look_sensitivity, sensitivity_target, minf(1.0, delta * 10.0))
 
     if Input.is_action_pressed("fire") or touch_fire:
         shoot()
@@ -321,6 +334,8 @@ func take_damage(amount: int) -> void:
         rotation = Vector3.ZERO
         pitch = 0.0
         camera.rotation = Vector3.ZERO
+        aim_pressed = false
+        camera.fov = 78.0
         _emit_hud()
 
 func _emit_hud() -> void:
