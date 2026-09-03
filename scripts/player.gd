@@ -3,6 +3,49 @@ extends CharacterBody3D
 signal hud_changed(health: int, ammo: int, reserve: int)
 signal weapon_changed(name: String)
 
+class MobileJoystick extends Control:
+    signal value_changed(value: Vector2)
+    var radius := 68.0
+    var knob_radius := 28.0
+    var value := Vector2.ZERO
+    var active := false
+
+    func _ready() -> void:
+        mouse_filter = Control.MOUSE_FILTER_STOP
+        queue_redraw()
+
+    func _gui_input(event: InputEvent) -> void:
+        if event is InputEventScreenTouch:
+            if event.pressed:
+                active = true
+                _update_value(event.position)
+                accept_event()
+            elif active:
+                active = false
+                value = Vector2.ZERO
+                value_changed.emit(value)
+                queue_redraw()
+                accept_event()
+        elif event is InputEventScreenDrag and active:
+            _update_value(event.position)
+            accept_event()
+
+    func _update_value(local_position: Vector2) -> void:
+        var center := size * 0.5
+        var offset := local_position - center
+        if offset.length() > radius:
+            offset = offset.normalized() * radius
+        value = Vector2(offset.x / radius, offset.y / radius)
+        value_changed.emit(value)
+        queue_redraw()
+
+    func _draw() -> void:
+        var center := size * 0.5
+        draw_circle(center, radius, Color(0.05, 0.08, 0.12, 0.58))
+        draw_arc(center, radius, 0.0, TAU, 48, Color(0.8, 0.9, 1.0, 0.65), 3.0)
+        draw_circle(center + value * radius, knob_radius, Color(0.9, 0.95, 1.0, 0.9))
+        draw_circle(center + value * radius, knob_radius - 6.0, Color(0.18, 0.25, 0.32, 0.9))
+
 const WeaponData = preload("res://scripts/weapon_data.gd")
 const WEAPONS := WeaponData.WEAPONS
 
@@ -32,10 +75,11 @@ var slide_timer := 0.0
 var stand_height := 1.8
 var crouch_height := 1.15
 var current_height := 1.8
+var mobile_move := Vector2.ZERO
 
 func _ready() -> void:
     camera = Camera3D.new()
-    camera.position = Vector3(0, 0.65, 0)
+    camera.position = Vector3(0, 0.95, 0)
     camera.current = true
     add_child(camera)
     _create_weapon_mesh()
@@ -72,30 +116,37 @@ func _create_weapon_mesh() -> void:
 
 func _create_mobile_movement_controls() -> void:
     var controls := CanvasLayer.new()
-    controls.name = "MovementControls"
+    controls.name = "MobileMovementControls"
     controls.layer = 20
     add_child(controls)
 
+    var joystick := MobileJoystick.new()
+    joystick.name = "MoveJoystick"
+    joystick.position = Vector2(28, 480)
+    joystick.size = Vector2(170, 170)
+    joystick.value_changed.connect(func(value: Vector2): mobile_move = value)
+    controls.add_child(joystick)
+
     var sprint := Button.new()
     sprint.text = "KOŞ"
-    sprint.position = Vector2(245, 515)
-    sprint.size = Vector2(90, 55)
+    sprint.position = Vector2(210, 500)
+    sprint.size = Vector2(88, 55)
     sprint.button_down.connect(func(): sprint_pressed = true)
     sprint.button_up.connect(func(): sprint_pressed = false)
     controls.add_child(sprint)
 
     var crouch := Button.new()
     crouch.text = "ÇÖMEL"
-    crouch.position = Vector2(245, 580)
-    crouch.size = Vector2(90, 55)
+    crouch.position = Vector2(210, 565)
+    crouch.size = Vector2(88, 55)
     crouch.button_down.connect(func(): crouch_pressed = true)
     crouch.button_up.connect(func(): crouch_pressed = false)
     controls.add_child(crouch)
 
     var jump := Button.new()
     jump.text = "ZIPLA"
-    jump.position = Vector2(340, 515)
-    jump.size = Vector2(90, 120)
+    jump.position = Vector2(310, 500)
+    jump.size = Vector2(88, 120)
     jump.pressed.connect(func(): jump_pressed = true)
     controls.add_child(jump)
 
@@ -130,7 +181,8 @@ func _physics_process(delta: float) -> void:
     reload_timer = maxf(0.0, reload_timer - delta)
     slide_timer = maxf(0.0, slide_timer - delta)
 
-    var input_vec := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+    var keyboard_input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+    var input_vec := mobile_move if mobile_move.length() > 0.05 else keyboard_input
     var direction := Vector3(input_vec.x, 0, input_vec.y).rotated(Vector3.UP, rotation.y)
     var wants_sprint := sprint_pressed or Input.is_key_pressed(KEY_SHIFT)
     var wants_crouch := crouch_pressed or Input.is_key_pressed(KEY_CTRL)
@@ -142,13 +194,10 @@ func _physics_process(delta: float) -> void:
     else:
         speed = 6.0
 
-    if wants_crouch:
-        _set_crouched(true)
-    else:
-        _set_crouched(false)
+    _set_crouched(wants_crouch)
 
     if jump_pressed or Input.is_action_just_pressed("ui_accept"):
-        if is_on_floor() and not crouch_pressed:
+        if is_on_floor() and not wants_crouch:
             velocity.y = jump_velocity
         jump_pressed = false
 
@@ -163,9 +212,8 @@ func _physics_process(delta: float) -> void:
 
     if not is_on_floor():
         velocity.y -= gravity * delta
-    else:
-        if velocity.y < 0.0:
-            velocity.y = 0.0
+    elif velocity.y < 0.0:
+        velocity.y = 0.0
 
     move_and_slide()
 
@@ -190,7 +238,8 @@ func _set_crouched(active: bool) -> void:
 
 func shoot() -> void:
     if reload_timer > 0.0 or fire_cooldown > 0.0 or ammo <= 0:
-        if ammo <= 0: reload()
+        if ammo <= 0:
+            reload()
         return
     var data: Dictionary = WEAPONS[weapon_name]
     ammo -= 1
