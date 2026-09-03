@@ -9,11 +9,13 @@ const OperationData = preload("res://scripts/operation_data.gd")
 const CityArena = preload("res://scripts/city_arena.gd")
 const MissionManager = preload("res://scripts/mission_manager.gd")
 const GameManager = preload("res://scripts/game_manager.gd")
+const SaveManager = preload("res://scripts/save_manager.gd")
 
 var player: CharacterBody3D
 var city_arena: Node3D
 var mission_manager: Node
 var game_manager: Node
+var save_manager: Node
 var score := 0
 var mission_id := 1
 var operation_index := 0
@@ -33,8 +35,11 @@ var language_button: Button
 var map_open := false
 var selected_voice := "tr"
 var spawned_enemies: Array[Node] = []
+var mission_finished := false
 
 func _ready() -> void:
+    save_manager = SaveManager.new()
+    add_child(save_manager)
     _build_world()
     _spawn_player()
     _build_hud()
@@ -52,7 +57,13 @@ func _ready() -> void:
     player.weapon_changed.connect(_on_weapon_changed)
     _on_player_hud_changed(player.health, player.ammo, player.reserve_ammo)
     _on_weapon_changed(player.weapon_name)
-    _select_operation(0)
+    score = save_manager.score
+    if save_manager.selected_country != "" and GlobalMap.is_unlocked(save_manager.selected_country):
+        GlobalMap.select_country(save_manager.selected_country)
+    operation_index = save_manager.selected_operation
+    _refresh_country_list()
+    _refresh_operation_list()
+    _select_operation(operation_index)
 
 func _process(_delta: float) -> void:
     if is_instance_valid(mission_manager) and mission_manager.active and mission_manager.objective_type == "REACH":
@@ -111,7 +122,7 @@ func _spawn_wave(enemy_count: int) -> void:
 
 func _build_hud() -> void:
     var hud := CanvasLayer.new(); hud.name = "HUD"; add_child(hud)
-    score_label = Label.new(); score_label.position = Vector2(28,18); score_label.text = "SKOR 0"; hud.add_child(score_label)
+    score_label = Label.new(); score_label.position = Vector2(28,18); hud.add_child(score_label)
     status_label = Label.new(); status_label.position = Vector2(28,55); hud.add_child(status_label)
     mission_label = Label.new(); mission_label.position = Vector2(28,105); hud.add_child(mission_label)
     objective_label = Label.new(); objective_label.position = Vector2(28,135); hud.add_child(objective_label)
@@ -131,6 +142,7 @@ func _build_hud() -> void:
     var reload := Button.new(); reload.text = "ŞARJÖR"; reload.position = Vector2(930,585); reload.size = Vector2(130,70); reload.pressed.connect(func(): player.reload()); hud.add_child(reload)
     var weapon_a := Button.new(); weapon_a.text = "1 • TÜFEK"; weapon_a.position = Vector2(760,545); weapon_a.size = Vector2(150,55); weapon_a.pressed.connect(func(): player.equip_weapon("TAARRUZ TÜFEĞİ")); hud.add_child(weapon_a)
     var weapon_b := Button.new(); weapon_b.text = "2 • MAKİNELİ"; weapon_b.position = Vector2(760,605); weapon_b.size = Vector2(150,55); weapon_b.pressed.connect(func(): player.equip_weapon("HAFİF MAKİNELİ")); hud.add_child(weapon_b)
+    var weapon_c := Button.new(); weapon_c.text = "3 • KESKİN"; weapon_c.position = Vector2(930,515); weapon_c.size = Vector2(130,55); weapon_c.pressed.connect(func(): player.equip_weapon("KESKİN NİŞANCI")); hud.add_child(weapon_c)
 
 func _refresh_country_list() -> void:
     if not is_instance_valid(country_list): return
@@ -151,15 +163,22 @@ func _refresh_operation_list() -> void:
     var operations := OperationData.get_operations(GlobalMap.selected_country)
     for i in range(operations.size()):
         var item := operations[i]
-        var button := Button.new(); button.text = "%s • %s • Zorluk %d" % [item[0],item[1],item[3]]; button.pressed.connect(func(): _select_operation(i)); operation_list.add_child(button)
+        var done := " ✓" if save_manager != null and save_manager.is_operation_completed(GlobalMap.selected_country, i) else ""
+        var button := Button.new(); button.text = "%s • %s • Zorluk %d%s" % [item[0],item[1],item[3],done]; button.pressed.connect(func(): _select_operation(i)); operation_list.add_child(button)
 
 func _select_operation(index: int) -> void:
-    operation_index = index
+    var operations := OperationData.get_operations(GlobalMap.selected_country)
+    operation_index = clampi(index, 0, operations.size() - 1)
     var op := OperationData.get_operation(GlobalMap.selected_country, operation_index)
+    mission_finished = false
     mission_label.text = "%s • %s" % [op[0],op[1]]
     status_label.text = "GÖREV: %s" % op[2]
     map_label.text = "%s → %s\n%s" % [GlobalMap.selected_country,op[0],op[2]]
     _rebuild_city()
+    if is_instance_valid(save_manager):
+        save_manager.selected_country = GlobalMap.selected_country
+        save_manager.selected_operation = operation_index
+        save_manager.save_game()
     if is_instance_valid(mission_manager): mission_manager.start(op)
     if is_instance_valid(game_manager):
         game_manager.start_mission(int(op[3]))
@@ -192,6 +211,7 @@ func _add_hold_button(hud: CanvasLayer,text: String,pos: Vector2,action: String)
 func _on_player_hud_changed(health: int,ammo: int,reserve: int) -> void:
     if is_instance_valid(health_label): health_label.text="CAN %d" % health
     if is_instance_valid(ammo_label): ammo_label.text="%02d / %02d" % [ammo,reserve]
+    if is_instance_valid(score_label): score_label.text="SKOR %d" % score
 
 func _on_weapon_changed(name: String) -> void:
     if is_instance_valid(weapon_label): weapon_label.text = "SİLAH: %s" % name
@@ -201,9 +221,10 @@ func _on_objective_changed(title: String,progress: String) -> void:
 
 func _on_enemy_died() -> void:
     score += 100
-    if is_instance_valid(score_label): score_label.text="SKOR %d" % score
     if is_instance_valid(mission_manager): mission_manager.register_kill()
     if is_instance_valid(game_manager): game_manager.register_enemy_killed()
+    if is_instance_valid(save_manager): save_manager.score = score
+    if is_instance_valid(score_label): score_label.text="SKOR %d" % score
 
 func _on_wave_changed(wave_number: int, remaining: int) -> void:
     status_label.text="DALGA %d • KALAN %d" % [wave_number, remaining]
@@ -223,14 +244,25 @@ func _on_game_mission_changed(text: String) -> void:
 func _on_all_waves_completed() -> void:
     _clear_enemies()
     if is_instance_valid(mission_manager): mission_manager.active = false
-    status_label.text="OPERASYON TAMAMLANDI • TÜM DALGALAR"
-    objective_label.text="HEDEF TAMAMLANDI"
+    _finish_operation()
 
-func _on_mission_completed(reward: int) -> void:
-    score += reward
-    status_label.text="GÖREV TAMAMLANDI • +%d XP" % reward
+func _finish_operation() -> void:
+    if mission_finished: return
+    mission_finished = true
+    var op := OperationData.get_operation(GlobalMap.selected_country, operation_index)
+    var reward := int(op[3]) * 250
+    if is_instance_valid(save_manager):
+        save_manager.complete_operation(GlobalMap.selected_country, operation_index, reward)
+        score = save_manager.score
+    status_label.text="OPERASYON TAMAMLANDI • +%d XP" % reward
     objective_label.text="HEDEF TAMAMLANDI"
     if GlobalMap.selected_country == "Türkiye" and mission_id <= WorldMap.MISSIONS.size():
         WorldMap.complete_mission(mission_id)
         if mission_id < WorldMap.MISSIONS.size(): mission_id += 1
     _refresh_country_list()
+    _refresh_operation_list()
+
+func _on_mission_completed(_reward: int) -> void:
+    # Kill objective completion no longer ends the operation early.
+    if is_instance_valid(game_manager) and game_manager.active:
+        status_label.text="ANA HEDEF TAMAM • DALGALAR DEVAM EDİYOR"
