@@ -30,17 +30,33 @@ var lost_target_timer := 0.0
 var defense_target := Vector3.ZERO
 var defense_active := false
 var objective_attack_timer := 0.0
+var role := "ASSAULT"
+var cover_position := Vector3.ZERO
+var flank_position := Vector3.ZERO
+var tactical_timer := 0.0
 
 func configure_country(country_name: String) -> void:
     country = country_name
     if is_instance_valid(body_mesh): _apply_country_look()
+
+func configure_role(role_name: String) -> void:
+    role = role_name.to_upper()
+    match role:
+        "SUPPORT":
+            preferred_range = 10.5
+            attack_range = 16.0
+        "FLANKER":
+            preferred_range = 6.5
+            speed = maxf(speed, 2.6)
+        _:
+            role = "ASSAULT"
 
 func apply_support_bonus(incoming_damage_multiplier: float = 1.0, incoming_intelligence_bonus: int = 0) -> void:
     damage_multiplier = maxf(1.0, incoming_damage_multiplier)
     intelligence_bonus = maxi(0, incoming_intelligence_bonus)
     health = maxi(50, int(round(max_health / damage_multiplier)))
     speed = maxf(1.5, 2.2 - float(intelligence_bonus) * 0.003)
-    preferred_range = clampf(7.5 + float(intelligence_bonus) * 0.02, 6.0, 11.0)
+    preferred_range = clampf(preferred_range + float(intelligence_bonus) * 0.02, 6.0, 12.0)
 
 func configure_defense_target(position: Vector3) -> void:
     defense_target = position
@@ -51,12 +67,15 @@ func _ready() -> void:
     patrol_phase = float(get_instance_id() % 100) * 0.1
     combat_phase = float(get_instance_id() % 17) * 0.37
     strafe_direction = -1.0 if get_instance_id() % 2 == 0 else 1.0
+    var role_roll := get_instance_id() % 10
+    if role_roll < 2: configure_role("FLANKER")
+    elif role_roll < 4: configure_role("SUPPORT")
+    else: configure_role("ASSAULT")
     body_mesh = MeshInstance3D.new()
     var capsule := CapsuleMesh.new()
     capsule.radius = 0.45
     capsule.height = 1.8
     body_mesh.mesh = capsule
-    body_mesh.position.y = 0.0
     add_child(body_mesh)
     _apply_country_look()
     var shape := CollisionShape3D.new()
@@ -76,20 +95,7 @@ func _apply_country_look() -> void:
 
 func _country_color(uniform_id: String) -> Color:
     var palette := {
-        "modern_turkish": Color("#53634f"), "modern_greek": Color("#536b73"),
-        "modern_bulgarian": Color("#596456"), "modern_german": Color("#3f464b"),
-        "modern_french": Color("#3d4c5f"), "modern_italian": Color("#536052"),
-        "modern_spanish": Color("#665f4d"), "modern_british": Color("#4b5563"),
-        "modern_us": Color("#4f5d4b"), "modern_canadian": Color("#55624e"),
-        "modern_mexican": Color("#53604c"), "modern_brazilian": Color("#53634f"),
-        "modern_argentine": Color("#58646a"), "modern_egyptian": Color("#6b634f"),
-        "modern_moroccan": Color("#655d4d"), "modern_south_african": Color("#4d5d4f"),
-        "modern_saudi": Color("#4f5c50"), "modern_uae": Color("#4f5d53"),
-        "modern_iranian": Color("#4d5b4f"), "modern_iraqi": Color("#5d604d"),
-        "modern_indian": Color("#53624e"), "modern_pakistani": Color("#4e624f"),
-        "modern_chinese": Color("#4b5552"), "modern_japanese": Color("#4e575c"),
-        "modern_south_korean": Color("#4e5a62"), "modern_indonesian": Color("#53614f"),
-        "modern_australian": Color("#56624f"), "modern_new_zealand": Color("#505c54")
+        "modern_turkish": Color("#53634f"), "modern_greek": Color("#536b73"), "modern_bulgarian": Color("#596456"), "modern_german": Color("#3f464b"), "modern_french": Color("#3d4c5f"), "modern_italian": Color("#536052"), "modern_spanish": Color("#665f4d"), "modern_british": Color("#4b5563"), "modern_us": Color("#4f5d4b"), "modern_canadian": Color("#55624e"), "modern_mexican": Color("#53604c"), "modern_brazilian": Color("#53634f"), "modern_argentine": Color("#58646a"), "modern_egyptian": Color("#6b634f"), "modern_moroccan": Color("#655d4d"), "modern_south_african": Color("#4d5d4f"), "modern_saudi": Color("#4f5c50"), "modern_uae": Color("#4f5d53"), "modern_iranian": Color("#4d5b4f"), "modern_iraqi": Color("#5d604d"), "modern_indian": Color("#53624e"), "modern_pakistani": Color("#4e624f"), "modern_chinese": Color("#4b5552"), "modern_japanese": Color("#4e575c"), "modern_south_korean": Color("#4e5a62"), "modern_indonesian": Color("#53614f"), "modern_australian": Color("#56624f"), "modern_new_zealand": Color("#505c54")
     }
     if palette.has(uniform_id): return palette[uniform_id]
     var hash_value := absi(hash(uniform_id))
@@ -98,19 +104,16 @@ func _country_color(uniform_id: String) -> Color:
 
 func _get_defense_context() -> Node:
     var root := get_tree().current_scene
-    if root == null:
-        return null
+    if root == null: return null
     for child in root.get_children():
-        if child != self and child.has_method("damage_defend_objective"):
-            return child
+        if child != self and child.has_method("damage_defend_objective"): return child
     return null
 
 func _get_objective_position() -> Vector3:
     var root := get_tree().current_scene
     if root != null:
         for child in root.get_children():
-            if child.has_method("get_objective_position"):
-                return child.get_objective_position()
+            if child.has_method("get_objective_position"): return child.get_objective_position()
     return defense_target
 
 func _physics_process(delta: float) -> void:
@@ -119,46 +122,41 @@ func _physics_process(delta: float) -> void:
         if hit_flash_timer == 0.0: _apply_country_look()
     if callout_timer > 0.0: callout_timer = maxf(0.0, callout_timer - delta)
     if not is_instance_valid(target): return
-
     attack_timer = maxf(0.0, attack_timer - delta)
     objective_attack_timer = maxf(0.0, objective_attack_timer - delta)
+    tactical_timer = maxf(0.0, tactical_timer - delta)
     combat_phase += delta
-    var offset := target.global_position - global_position
-    offset.y = 0
+    var offset := target.global_position - global_position; offset.y = 0
     var distance := offset.length()
     has_line_of_sight = _has_line_of_sight()
-
     if has_line_of_sight:
-        last_seen_position = target.global_position
-        lost_target_timer = 0.0
-    else:
-        lost_target_timer += delta
+        last_seen_position = target.global_position; lost_target_timer = 0.0
+    else: lost_target_timer += delta
 
     var mission := _get_defense_context()
     var defending := mission != null and mission.get("objective_type") == "DEFEND" and mission.get("active")
     if defending:
-        defense_active = true
-        defense_target = _get_objective_position()
-
+        defense_active = true; defense_target = _get_objective_position()
     var objective_distance := global_position.distance_to(defense_target) if defense_active else 9999.0
     var player_from_objective := target.global_position.distance_to(defense_target) if defense_active else 9999.0
     if defending and objective_distance <= 4.0 and player_from_objective > 6.0:
         state = "PRESSURE_OBJECTIVE"
     elif distance <= 16.0:
-        state = "ATTACK" if distance <= attack_range else "CHASE"
+        if role == "FLANKER" and distance > 5.0 and has_line_of_sight:
+            state = "FLANK"
+        elif distance <= attack_range: state = "ATTACK"
+        else: state = "CHASE"
     elif not has_line_of_sight and lost_target_timer < 2.5:
         state = "SEARCH"
-    else:
-        state = "PATROL"
-
-    if health <= max_health * 0.3 and distance < 10.0:
-        state = "RETREAT"
+    else: state = "PATROL"
+    if health <= max_health * 0.3 and distance < 10.0: state = "RETREAT"
 
     match state:
         "PATROL": _patrol(delta)
         "SEARCH": _search()
         "CHASE": _chase()
         "ATTACK": _combat(delta, distance)
+        "FLANK": _flank()
         "PRESSURE_OBJECTIVE": _pressure_objective(delta)
         "RETREAT": _retreat()
 
@@ -167,80 +165,66 @@ func _has_line_of_sight() -> bool:
     if space == null: return false
     var from := global_position + Vector3.UP * 0.8
     var to := target.global_position + Vector3.UP * 0.8
-    var query := PhysicsRayQueryParameters3D.create(from, to)
-    query.exclude = [self]
+    var query := PhysicsRayQueryParameters3D.create(from, to); query.exclude = [self]
     var hit := space.intersect_ray(query)
     return not hit.has("collider") or hit.collider == target
 
 func _patrol(delta: float) -> void:
     patrol_phase += delta * 0.55
-    var patrol_target := spawn_position + Vector3(cos(patrol_phase) * 3.5, 0, sin(patrol_phase) * 3.5)
-    _move_toward(patrol_target, speed * 0.45)
+    _move_toward(spawn_position + Vector3(cos(patrol_phase) * 3.5, 0, sin(patrol_phase) * 3.5), speed * 0.45)
 
-func _search() -> void:
-    _move_toward(last_seen_position, speed * 0.8)
-
-func _chase() -> void:
-    _move_toward(target.global_position, speed * 1.15)
+func _search() -> void: _move_toward(last_seen_position, speed * 0.8)
+func _chase() -> void: _move_toward(target.global_position, speed * 1.15)
 
 func _combat(delta: float, distance: float) -> void:
-    var to_target := target.global_position - global_position
-    to_target.y = 0
+    var to_target := target.global_position - global_position; to_target.y = 0
     if to_target.length() <= 0.01: return
     var direction := to_target.normalized()
     var side := Vector3(-direction.z, 0, direction.x) * strafe_direction
-    var desired := Vector3.ZERO
-    if distance > preferred_range + 1.0:
-        desired = direction
-    elif distance < preferred_range - 1.0:
-        desired = -direction * 0.65
+    var desired := direction if distance > preferred_range + 1.0 else (-direction * 0.65 if distance < preferred_range - 1.0 else Vector3.ZERO)
     desired += side * (0.45 + sin(combat_phase * 1.7) * 0.15)
-    if desired.length() > 0.05:
-        _move_toward(global_position + desired.normalized() * 2.0, speed)
-    else:
-        velocity = Vector3.ZERO
+    if desired.length() > 0.05: _move_toward(global_position + desired.normalized() * 2.0, speed)
+    else: velocity = Vector3.ZERO
     look_at(Vector3(target.global_position.x, global_position.y, target.global_position.z), Vector3.UP)
-
     if has_line_of_sight and attack_timer <= 0.0:
         attack_timer = maxf(0.65, 1.0 - float(intelligence_bonus) * 0.004)
         callout_timer = 1.5
         if target.has_method("take_damage"):
             var damage := maxi(3, int(round(8.0 / damage_multiplier)))
-            target.take_damage(damage)
-            hit_player.emit(damage)
+            target.take_damage(damage); hit_player.emit(damage)
+
+func _flank() -> void:
+    if flank_position == Vector3.ZERO or tactical_timer <= 0.0:
+        var to_target := target.global_position - global_position; to_target.y = 0
+        var direction := to_target.normalized() if to_target.length() > 0.1 else Vector3.FORWARD
+        var side := Vector3(-direction.z, 0, direction.x) * strafe_direction
+        flank_position = target.global_position + side * 9.0 + direction * 2.0
+        tactical_timer = 2.5
+    _move_toward(flank_position, speed * 1.2)
+    if global_position.distance_to(flank_position) < 1.5: state = "ATTACK"
 
 func _pressure_objective(delta: float) -> void:
     _move_toward(defense_target, speed * 0.9)
     look_at(Vector3(defense_target.x, global_position.y, defense_target.z), Vector3.UP)
     var mission := _get_defense_context()
-    if mission == null or not mission.get("active") or mission.get("objective_type") != "DEFEND":
-        return
+    if mission == null or not mission.get("active") or mission.get("objective_type") != "DEFEND": return
     if global_position.distance_to(defense_target) <= 4.2 and objective_attack_timer <= 0.0:
         objective_attack_timer = 1.15
         mission.damage_defend_objective(7.0 + float(intelligence_bonus) * 0.03)
 
 func _retreat() -> void:
-    var away := global_position - target.global_position
-    away.y = 0
-    if away.length() > 0.1:
-        _move_toward(global_position + away.normalized() * 3.0, speed * 1.1)
+    var away := global_position - target.global_position; away.y = 0
+    if away.length() > 0.1: _move_toward(global_position + away.normalized() * 3.0, speed * 1.1)
 
 func _move_toward(destination: Vector3, move_speed: float) -> void:
-    var offset := destination - global_position
-    offset.y = 0
+    var offset := destination - global_position; offset.y = 0
     if offset.length() > 0.8:
-        var direction := offset.normalized()
-        velocity.x = direction.x * move_speed
-        velocity.z = direction.z * move_speed
-        look_at(global_position + direction, Vector3.UP)
-        move_and_slide()
-    else:
-        velocity = Vector3.ZERO
+        var direction := offset.normalized(); velocity.x = direction.x * move_speed; velocity.z = direction.z * move_speed; look_at(global_position + direction, Vector3.UP); move_and_slide()
+    else: velocity = Vector3.ZERO
 
 func take_damage(amount: int) -> void:
     health -= amount
     hit_flash_timer = 0.08
     body_mesh.modulate = Color(1.0, 0.25, 0.25)
     if health <= 0:
-        died.emit()
-        queue_free()
+        died.emit(); queue_free()
