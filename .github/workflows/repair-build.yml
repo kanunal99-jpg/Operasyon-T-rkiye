@@ -1,0 +1,94 @@
+name: Repair remaining build blockers
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.head_commit.message, 'fix(ci): apply remaining Godot Android repairs') }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply deterministic repairs
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              s = p.read_text(encoding='utf-8')
+              if old not in s:
+                  raise SystemExit(f'Missing expected text in {path}: {old!r}')
+              p.write_text(s.replace(old, new), encoding='utf-8')
+
+          replace('scripts/content_controller.gd',
+                  'var countries := global_map.countries_by_continent(selected_continent)',
+                  'var countries: Array = global_map.countries_by_continent(selected_continent)')
+          replace('scripts/content_controller.gd',
+                  'var unlocked := global_map.is_unlocked(country_name)',
+                  'var unlocked: bool = global_map.is_unlocked(country_name)')
+          replace('scripts/content_controller.gd',
+                  'var completed := save.is_operation_completed(selected_country, i)',
+                  'var completed: bool = save.is_operation_completed(selected_country, i)')
+
+          replace('scripts/update_manager.gd',
+                  'var file_size := FileAccess.get_length(download_path)',
+                  'var file := FileAccess.open(download_path, FileAccess.READ)\n        if file == null:\n            _remove_download()\n            _schedule_retry("Güncelleme dosyası okunamadı.")\n            return\n        var file_size: int = file.get_length()\n        file.close()')
+
+          replace('scripts/game_polish_manager.gd',
+                  'var waves := controller.get("waves")',
+                  'var waves: Node = controller.get("waves")')
+          replace('scripts/game_polish_manager.gd',
+                  'var mission := controller.get("mission")',
+                  'var mission: Node = controller.get("mission")')
+          replace('scripts/game_polish_manager.gd',
+                  'var layer := player.get("mobile_controls")',
+                  'var layer: Control = player.get("mobile_controls")')
+          replace('scripts/game_polish_manager.gd',
+                  'var map_open := is_instance_valid(map_menu) and map_menu.visible',
+                  'var map_open: bool = is_instance_valid(map_menu) and map_menu.visible')
+
+          p = Path('main.tscn')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('[node name="GamePolishManager" type="Node"]', '[node name="GamePolishManager" type="Node" parent="."]')
+          s = s.replace('[node name="UpdateManager" type="Node"]', '[node name="UpdateManager" type="Node" parent="."]')
+          p.write_text(s, encoding='utf-8')
+
+          manifest = Path('android_ota/plugin/src/main/AndroidManifest.xml')
+          s = manifest.read_text(encoding='utf-8')
+          s = s.replace('android:name="androidx.core.content.FileProvider"', 'android:name="com.operasyonturkiye.ota.OperasyonTurkiyeFileProvider"')
+          s = s.replace('                tools:replace="android:resource"\n', '')
+          s = s.replace('            tools:replace="android:authorities">\n', '            >\n')
+          manifest.write_text(s, encoding='utf-8')
+
+          provider = Path('android_ota/plugin/src/main/java/com/operasyonturkiye/ota/OperasyonTurkiyeFileProvider.java')
+          provider.write_text('package com.operasyonturkiye.ota;\n\npublic class OperasyonTurkiyeFileProvider extends androidx.core.content.FileProvider {\n}\n', encoding='utf-8')
+
+          java = Path('android_ota/plugin/src/main/java/com/operasyonturkiye/ota/GodotAndroidPlugin.java')
+          s = java.read_text(encoding='utf-8')
+          s = s.replace('import androidx.core.content.FileProvider;\n', '')
+          s = s.replace('FileProvider.getUriForFile(', 'OperasyonTurkiyeFileProvider.getUriForFile(')
+          java.write_text(s, encoding='utf-8')
+      - name: Validate changes
+        run: |
+          grep -q 'var countries: Array' scripts/content_controller.gd
+          grep -q 'var unlocked: bool' scripts/content_controller.gd
+          grep -q 'var completed: bool' scripts/content_controller.gd
+          grep -q 'file.get_length()' scripts/update_manager.gd
+          grep -q 'var waves: Node' scripts/game_polish_manager.gd
+          grep -q 'var mission: Node' scripts/game_polish_manager.gd
+          grep -q 'var map_open: bool' scripts/game_polish_manager.gd
+          grep -q 'parent="."' main.tscn
+          grep -q 'OperasyonTurkiyeFileProvider' android_ota/plugin/src/main/AndroidManifest.xml
+          test -s android_ota/plugin/src/main/java/com/operasyonturkiye/ota/OperasyonTurkiyeFileProvider.java
+      - name: Commit repairs
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/content_controller.gd scripts/update_manager.gd scripts/game_polish_manager.gd main.tscn android_ota/plugin/src/main/AndroidManifest.xml android_ota/plugin/src/main/java/com/operasyonturkiye/ota/GodotAndroidPlugin.java android_ota/plugin/src/main/java/com/operasyonturkiye/ota/OperasyonTurkiyeFileProvider.java
+          git diff --cached --quiet || git commit -m 'fix(ci): apply remaining Godot Android repairs'
+          git push
