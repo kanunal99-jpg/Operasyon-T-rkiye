@@ -123,7 +123,7 @@ func _ready() -> void:
     weapon_changed.emit(weapon_name)
 
 func _notification(what: int) -> void:
-    if what == NOTIFICATION_RESIZED:
+    if what == NOTIFICATION_WM_SIZE_CHANGED:
         call_deferred("_layout_mobile_controls")
 
 func _viewport_size() -> Vector2:
@@ -254,9 +254,9 @@ func _unhandled_input(event: InputEvent) -> void:
         elif not event.pressed and event.index == look_touch_id:
             look_touch_id = -1
     elif event is InputEventScreenDrag and event.index == look_touch_id:
-        var delta := event.position - look_last
+        var drag_delta: Vector2 = event.position - look_last
         look_last = event.position
-        _apply_look(delta)
+        _apply_look(drag_delta)
     elif event is InputEventKey and event.pressed:
         if event.keycode == KEY_1:
             equip_weapon("TAARRUZ TÜFEĞİ")
@@ -373,49 +373,28 @@ func equip_weapon(name: String) -> void:
     var data: Dictionary = WEAPONS[name]
     ammo = int(data["magazine"])
     reserve_ammo = int(data["reserve"])
-    reload_timer = 0.25
-    weapon.scale = Vector3(1.0, 1.0, 1.0) if name == "TAARRUZ TÜFEĞİ" else Vector3(0.82, 0.82, 0.72)
-    weapon_changed.emit(weapon_name)
     _emit_hud()
+    weapon_changed.emit(weapon_name)
 
 func reload() -> void:
-    if reload_timer > 0.0:
+    if reload_timer > 0.0 or ammo >= int(WEAPONS[weapon_name]["magazine"]) or reserve_ammo <= 0:
         return
-    var data: Dictionary = WEAPONS[weapon_name]
-    var mag := int(data["magazine"])
-    if ammo >= mag or reserve_ammo <= 0:
-        return
-    reload_timer = 0.8
-    var needed := mag - ammo
+    reload_timer = float(WEAPONS[weapon_name]["reload"])
+    var needed := int(WEAPONS[weapon_name]["magazine"]) - ammo
     var loaded := mini(needed, reserve_ammo)
     ammo += loaded
     reserve_ammo -= loaded
     _emit_hud()
 
 func take_damage(amount: int) -> void:
-    var applied := maxi(0, amount)
-    health = maxi(0, health - applied)
-    damage_flash_timer = 0.22
-    damage_feedback.emit(applied, health)
-    var now_critical := health > 0 and health <= 25
-    if now_critical != critical_active:
-        critical_active = now_critical
-        critical_health_changed.emit(critical_active)
+    if amount <= 0 or health <= 0:
+        return
+    health = maxi(0, health - amount)
+    damage_flash_timer = 0.25
+    critical_active = health <= 25
+    damage_feedback.emit(amount, health)
+    critical_health_changed.emit(critical_active)
     _emit_hud()
-    if health <= 0:
-        health = 100
-        var data: Dictionary = WEAPONS[weapon_name]
-        ammo = int(data["magazine"])
-        reserve_ammo = int(data["reserve"])
-        global_position = Vector3(0, 1.2, 12)
-        rotation = Vector3.ZERO
-        pitch = 0.0
-        camera.rotation = Vector3.ZERO
-        aim_pressed = false
-        camera.fov = 78.0
-        critical_active = false
-        critical_health_changed.emit(false)
-        _emit_hud()
 
 func _emit_hud() -> void:
     hud_changed.emit(health, ammo, reserve_ammo)
