@@ -10,6 +10,7 @@ const SaveManager = preload("res://scripts/save_manager.gd")
 const AllianceManager = preload("res://scripts/alliance_manager.gd")
 const MobileQuality = preload("res://scripts/mobile_quality.gd")
 const NewsCutsceneManager = preload("res://scripts/news_cutscene_manager.gd")
+const EnvironmentManager = preload("res://scripts/environment_manager.gd")
 
 var player: CharacterBody3D
 var city: Node3D
@@ -18,6 +19,7 @@ var waves: Node
 var save: Node
 var diplomacy: Node
 var quality: Node
+var atmosphere: Node
 var news: CanvasLayer
 var objective_marker: MeshInstance3D
 var enemies: Array[Node] = []
@@ -34,6 +36,7 @@ func _ready() -> void:
     diplomacy = AllianceManager.new(); add_child(diplomacy)
     diplomacy.import_state(save.diplomacy_state)
     news = NewsCutsceneManager.new(); add_child(news)
+    atmosphere = EnvironmentManager.new(); add_child(atmosphere)
     city = Node3D.new(); city.set_script(CityArena); add_child(city)
     player = CharacterBody3D.new(); player.set_script(Player); player.position = Vector3(0, 1.2, 25); add_child(player)
     mission = MissionManager.new(); add_child(mission)
@@ -43,14 +46,15 @@ func _ready() -> void:
     mission.mission_failed.connect(_on_failed)
     waves.wave_completed.connect(_on_wave_completed)
     waves.all_waves_completed.connect(_on_all_waves_completed)
+    atmosphere.environment_changed.connect(_on_environment_changed)
     _build_world()
     _build_hud()
     _start_operation(save.selected_operation)
 
 func _build_world() -> void:
-    var env := WorldEnvironment.new()
-    var e := Environment.new(); e.background_mode = Environment.BG_COLOR; e.background_color = Color("#202832"); e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR; e.ambient_light_energy = 0.8; env.environment = e; add_child(env)
-    var sun := DirectionalLight3D.new(); sun.rotation_degrees = Vector3(-55, -25, 0); sun.light_energy = 1.1; sun.shadow_enabled = quality.should_use_shadows(); add_child(sun)
+    # Lighting/environment are owned by EnvironmentManager so operations can
+    # change atmosphere without duplicating world nodes.
+    pass
 
 func _build_hud() -> void:
     var hud := CanvasLayer.new(); hud.name = "HUD"; add_child(hud)
@@ -67,12 +71,13 @@ func _start_operation(index: int) -> void:
     var op := OperationData.get_operation("Türkiye", clampi(index, 0, 2))
     operation_index = clampi(index, 0, 2); mission_finished = false
     city.configure("Türkiye", op[0], op[1]); city.build()
+    atmosphere.setup(city.theme, city.seed_value)
     _build_marker()
     mission.start(op)
     waves.start_mission(int(op[3]))
     if mission.objective_type == "DEFEND" or mission.objective_type == "SURVIVE": waves.set_endless_waves()
     _spawn_wave(waves.base_enemy_count)
-    status.text = "TÜRKİYE • %s • %s" % [op[0], op[1]]
+    status.text = "TÜRKİYE • %s • %s • %s" % [op[0], op[1], atmosphere.get_status_text()]
     news.play_briefing("Türkiye", op[0], op[1], diplomacy.get_allies("Türkiye").size())
 
 func _build_marker() -> void:
@@ -91,7 +96,7 @@ func _spawn_wave(count: int) -> void:
     for i in range(total):
         var enemy := CharacterBody3D.new(); enemy.set_script(Enemy); enemy.position = positions[i]; enemy.target = player; enemy.configure_country("Türkiye"); enemy.apply_support_bonus(diplomacy.get_damage_bonus("Türkiye"), diplomacy.get_intel_bonus("Türkiye")); enemy.died.connect(_on_enemy_died); add_child(enemy); enemies.append(enemy)
     waves.set_wave_enemy_count(enemies.size())
-    status.text = "DALGA %d • %d DÜŞMAN • DESTEK %d" % [waves.wave, enemies.size(), diplomacy.get_support_level("Türkiye")]
+    status.text = "DALGA %d • %d DÜŞMAN • DESTEK %d • %s" % [waves.wave, enemies.size(), diplomacy.get_support_level("Türkiye"), atmosphere.get_status_text()]
 
 func _process(_delta: float) -> void:
     if not is_instance_valid(mission) or not mission.active: return
@@ -105,6 +110,11 @@ func _on_enemy_died() -> void:
 
 func _on_objective(title: String, progress: String) -> void:
     objective.text = "%s  [%s]" % [title, progress]
+
+func _on_environment_changed(time_phase: String, weather: String) -> void:
+    if is_instance_valid(info): info.text = "ATMOSFER • %s • %s" % [time_phase, weather]
+    if is_instance_valid(status) and is_instance_valid(waves):
+        status.text = "DALGA %d • %d DÜŞMAN • DESTEK %d • %s" % [waves.wave, enemies.size(), diplomacy.get_support_level("Türkiye"), atmosphere.get_status_text()]
 
 func _on_wave_completed(wave: int) -> void:
     if waves.active and not mission_finished: call_deferred("_next_wave")
