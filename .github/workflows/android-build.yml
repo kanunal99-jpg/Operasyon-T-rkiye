@@ -26,18 +26,22 @@ jobs:
       - name: Import project
         run: godot --headless --editor --quit --path .
 
+      - name: Validate Android export setup
+        run: |
+          test -d ~/.local/share/godot/export_templates/4.3.stable
+          test -f export_presets.cfg
+          grep -q 'platform="Android"' export_presets.cfg
+          grep -q 'gradle_build/use_gradle_build=false' export_presets.cfg
+
       - name: Build debug APK
         run: |
           mkdir -p build
-          godot --headless --verbose --path . --install-android-build-template --export-debug "Android" build/Operasyon-Turkiye-debug.apk
-
-      - name: Verify Android Gradle template
-        run: |
-          test -d android/build
-          test -f android/build/build.gradle
+          godot --headless --verbose --path . --export-debug "Android" build/Operasyon-Turkiye-debug.apk
 
       - name: Verify APK
-        run: test -s build/Operasyon-Turkiye-debug.apk
+        run: |
+          test -s build/Operasyon-Turkiye-debug.apk
+          file build/Operasyon-Turkiye-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
