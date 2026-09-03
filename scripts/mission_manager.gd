@@ -2,6 +2,7 @@ extends Node
 
 signal objective_changed(title: String, progress: String)
 signal mission_completed(reward: int)
+signal mission_failed
 signal country_unlocked(country: String)
 
 const TYPES := ["ELIMINATE", "DEFEND", "REACH", "SURVIVE"]
@@ -13,6 +14,7 @@ var survive_elapsed := 0.0
 var defend_seconds := 30.0
 var defend_elapsed := 0.0
 var defend_presence := false
+var defend_integrity := 100.0
 var active := false
 var reward := 500
 
@@ -21,6 +23,7 @@ func start(operation: Array) -> void:
     survive_elapsed = 0.0
     defend_elapsed = 0.0
     defend_presence = false
+    defend_integrity = 100.0
     target_kills = maxi(3, int(operation[3]) + 3)
     reward = int(operation[3]) * 250
     objective_type = TYPES[(int(operation[3]) + operation[0].length()) % TYPES.size()]
@@ -51,7 +54,6 @@ func register_kill() -> bool:
             _complete()
             return true
     elif objective_type == "DEFEND":
-        # Kills are combat feedback during defense, not the completion condition.
         kills += 1
         _emit_progress()
     return false
@@ -62,6 +64,15 @@ func set_defend_presence(is_inside: bool) -> void:
     if defend_presence != is_inside:
         defend_presence = is_inside
         _emit_progress()
+
+func damage_defend_objective(amount: float) -> void:
+    if not active or objective_type != "DEFEND":
+        return
+    defend_integrity = maxf(0.0, defend_integrity - maxf(0.0, amount))
+    _emit_progress()
+    if defend_integrity <= 0.0:
+        active = false
+        mission_failed.emit()
 
 func register_reach() -> bool:
     if not active or objective_type != "REACH":
@@ -74,7 +85,7 @@ func _emit_progress() -> void:
         "ELIMINATE": objective_changed.emit("HEDEF: DÜŞMAN BİRLİĞİNİ ETKİSİZ HALE GETİR", "%d / %d" % [kills, target_kills])
         "DEFEND":
             var state := "BÖLGEDE" if defend_presence else "BÖLGEYE DÖN"
-            objective_changed.emit("HEDEF: SAVUNMA BÖLGESİNİ KORU", "%s • %02d / %02d sn • %d etkisiz" % [state, int(defend_elapsed), int(defend_seconds), kills])
+            objective_changed.emit("HEDEF: SAVUNMA BÖLGESİNİ KORU", "%s • %02d / %02d sn • DAYANIKLILIK %d%% • %d etkisiz" % [state, int(defend_elapsed), int(defend_seconds), int(defend_integrity), kills])
         "REACH": objective_changed.emit("HEDEF: BULUŞMA NOKTASINA ULAŞ", "NOKTA AKTİF")
         "SURVIVE": objective_changed.emit("HEDEF: HAYATTA KAL", "%02d / %02d sn" % [int(survive_elapsed), int(survive_seconds)])
 
