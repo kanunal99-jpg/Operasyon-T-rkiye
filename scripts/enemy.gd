@@ -34,6 +34,8 @@ var role := "ASSAULT"
 var cover_position := Vector3.ZERO
 var flank_position := Vector3.ZERO
 var tactical_timer := 0.0
+var soldier_visual: Node3D
+var weapon_mesh: MeshInstance3D
 
 func configure_country(country_name: String) -> void:
     country = country_name
@@ -71,19 +73,85 @@ func _ready() -> void:
     if role_roll < 2: configure_role("FLANKER")
     elif role_roll < 4: configure_role("SUPPORT")
     else: configure_role("ASSAULT")
-    body_mesh = MeshInstance3D.new()
-    var capsule := CapsuleMesh.new()
-    capsule.radius = 0.45
-    capsule.height = 1.8
-    body_mesh.mesh = capsule
-    add_child(body_mesh)
-    _apply_country_look()
+    _create_soldier_model()
     var shape := CollisionShape3D.new()
     var capsule_shape := CapsuleShape3D.new()
-    capsule_shape.radius = 0.45
-    capsule_shape.height = 1.8
+    capsule_shape.radius = 0.38
+    capsule_shape.height = 1.75
     shape.shape = capsule_shape
+    shape.position.y = 0.88
     add_child(shape)
+
+func _create_soldier_model() -> void:
+    soldier_visual = Node3D.new()
+    soldier_visual.name = "SoldierModel"
+    soldier_visual.position.y = 0.0
+    add_child(soldier_visual)
+
+    body_mesh = MeshInstance3D.new()
+    var torso := BoxMesh.new()
+    torso.size = Vector3(0.72, 0.82, 0.42)
+    body_mesh.mesh = torso
+    body_mesh.position = Vector3(0, 1.12, 0)
+    soldier_visual.add_child(body_mesh)
+
+    var vest := MeshInstance3D.new()
+    var vest_mesh := BoxMesh.new()
+    vest_mesh.size = Vector3(0.78, 0.55, 0.47)
+    vest.mesh = vest_mesh
+    vest.position = Vector3(0, 1.18, -0.015)
+    soldier_visual.add_child(vest)
+
+    var head := MeshInstance3D.new()
+    var head_mesh := SphereMesh.new()
+    head_mesh.radius = 0.22
+    head_mesh.height = 0.44
+    head.mesh = head_mesh
+    head.position = Vector3(0, 1.72, 0)
+    var skin := StandardMaterial3D.new()
+    skin.albedo_color = Color("#b78362")
+    skin.roughness = 0.9
+    head.material_override = skin
+    soldier_visual.add_child(head)
+
+    var helmet := MeshInstance3D.new()
+    var helmet_mesh := SphereMesh.new()
+    helmet_mesh.radius = 0.27
+    helmet_mesh.height = 0.22
+    helmet.mesh = helmet_mesh
+    helmet.position = Vector3(0, 1.91, 0)
+    soldier_visual.add_child(helmet)
+
+    var limb_material := StandardMaterial3D.new()
+    limb_material.albedo_color = Color("#3e493b")
+    limb_material.roughness = 0.9
+    _add_limb(Vector3(-0.48, 1.12, 0), Vector3(0.18, 0.72, 0.18), limb_material, "LeftArm")
+    _add_limb(Vector3(0.48, 1.12, 0), Vector3(0.18, 0.72, 0.18), limb_material, "RightArm")
+    _add_limb(Vector3(-0.2, 0.48, 0), Vector3(0.22, 0.75, 0.22), limb_material, "LeftLeg")
+    _add_limb(Vector3(0.2, 0.48, 0), Vector3(0.22, 0.75, 0.22), limb_material, "RightLeg")
+
+    weapon_mesh = MeshInstance3D.new()
+    var rifle := BoxMesh.new()
+    rifle.size = Vector3(0.12, 0.12, 0.85)
+    weapon_mesh.mesh = rifle
+    weapon_mesh.position = Vector3(0.33, 1.02, -0.42)
+    weapon_mesh.rotation_degrees = Vector3(-8, 0, 8)
+    var weapon_material := StandardMaterial3D.new()
+    weapon_material.albedo_color = Color("#202428")
+    weapon_mesh.material_override = weapon_material
+    soldier_visual.add_child(weapon_mesh)
+
+    _apply_country_look()
+
+func _add_limb(pos: Vector3, size: Vector3, material: Material, limb_name: String) -> void:
+    var limb := MeshInstance3D.new()
+    limb.name = limb_name
+    var mesh := BoxMesh.new()
+    mesh.size = size
+    limb.mesh = mesh
+    limb.position = pos
+    limb.material_override = material
+    soldier_visual.add_child(limb)
 
 func _apply_country_look() -> void:
     var profile := CountryProfile.get_profile(country)
@@ -91,6 +159,11 @@ func _apply_country_look() -> void:
     material.albedo_color = _country_color(str(profile.get("uniform", "generic_modern")))
     material.roughness = 0.78
     body_mesh.material_override = material
+    for child in soldier_visual.get_children():
+        if child is MeshInstance3D and child != weapon_mesh and child.name not in ["SoldierModel"]:
+            if child.name in ["Head"]: continue
+            if child.name.begins_with("Left") or child.name.begins_with("Right") or child.name == "Vest":
+                child.material_override = material
     callout_text = CountryProfile.get_callout(country, "contact")
 
 func _country_color(uniform_id: String) -> Color:
