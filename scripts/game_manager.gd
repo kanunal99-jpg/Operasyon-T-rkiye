@@ -22,9 +22,11 @@ func start_mission(difficulty: int) -> void:
     start_wave(base_enemy_count)
 
 func start_wave(enemy_count: int) -> void:
+    if not active:
+        return
     remaining = maxi(0, enemy_count)
     wave_changed.emit(wave, remaining)
-    if remaining == 0 and active:
+    if remaining == 0:
         _complete_current_wave()
 
 func register_enemy_killed() -> void:
@@ -35,6 +37,14 @@ func register_enemy_killed() -> void:
     wave_changed.emit(wave, remaining)
     if remaining == 0:
         _complete_current_wave()
+
+func stop_mission() -> void:
+    active = false
+    remaining = 0
+    mission_changed.emit("OPERASYON SAHA AKIŞI DURDURULDU")
+
+func set_endless_waves() -> void:
+    max_waves = 999
 
 func _complete_current_wave() -> void:
     wave_completed.emit(wave)
