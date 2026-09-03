@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
 
+env:
+  GODOT_VERSION: 4.3-stable
+  ANDROID_HOME: /opt/android-sdk
+  ANDROID_SDK_ROOT: /opt/android-sdk
+
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -98,8 +103,6 @@ jobs:
         shell: sh
         run: |
           set -eu
-          rm -rf /tmp/godot_android_build_template
-          mkdir -p /tmp/godot_android_build_template
           godot --headless --path . --editor --install-android-build-template --quit
           test -d android/build
           test -f android/build.gradle
