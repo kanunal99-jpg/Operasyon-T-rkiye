@@ -6,6 +6,8 @@ var city := "İstanbul"
 var operation := "Boğaz Hattı"
 var theme := "urban"
 var seed_value := 1
+var enemy_spawn_positions: Array[Vector3] = []
+var objective_position := Vector3(0, 1, -18)
 
 func configure(country_name: String, city_name: String, operation_name: String) -> void:
     country = country_name
@@ -23,7 +25,15 @@ func build() -> void:
     _add_objective()
     _add_spawn_markers()
 
+func get_enemy_spawn_positions() -> Array[Vector3]:
+    return enemy_spawn_positions.duplicate()
+
+func get_objective_position() -> Vector3:
+    return objective_position
+
 func _clear_generated() -> void:
+    enemy_spawn_positions.clear()
+    objective_position = Vector3(0, 1, -18)
     for child in get_children():
         child.queue_free()
 
@@ -59,15 +69,12 @@ func _add_buildings() -> void:
         var side := -1.0 if i % 2 == 0 else 1.0
         var x := side * (13.0 + float((i * 7) % 18))
         var z := -32.0 + float((i * 13) % 62)
-        if abs(x) < 10 or abs(z) < 6:
-            continue
+        if abs(x) < 10 or abs(z) < 6: continue
         var width := rng.randf_range(6.0, 12.0)
         var depth := rng.randf_range(6.0, 12.0)
         var height := rng.randf_range(5.0, 15.0)
-        if theme == "desert":
-            height *= 0.7
-        if theme == "snow":
-            height *= 0.8
+        if theme == "desert": height *= 0.7
+        if theme == "snow": height *= 0.8
         _add_box("Building_%d" % i, Vector3(x, height * 0.5, z), Vector3(width, height, depth), _building_color(i), true)
 
 func _add_landmarks() -> void:
@@ -91,12 +98,13 @@ func _add_objective() -> void:
     mesh.bottom_radius = 0.7
     mesh.height = 2.0
     marker.mesh = mesh
-    marker.position = Vector3(0, 1, -18)
+    marker.position = objective_position
     marker.material_override = _material(Color("#d9a441"), true)
     add_child(marker)
 
 func _add_spawn_markers() -> void:
-    for p in [Vector3(-30, 1, -30), Vector3(30, 1, -30), Vector3(-30, 1, 30), Vector3(30, 1, 30)]:
+    enemy_spawn_positions = [Vector3(-30, 1, -30), Vector3(30, 1, -30), Vector3(-30, 1, 30), Vector3(30, 1, 30)]
+    for p in enemy_spawn_positions:
         var marker := Marker3D.new()
         marker.position = p
         marker.name = "EnemySpawn"
