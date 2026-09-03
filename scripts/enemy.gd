@@ -7,6 +7,7 @@ const CountryProfile = preload("res://scripts/country_profile.gd")
 
 var target: Node3D
 var health := 100
+var max_health := 100
 var speed := 2.2
 var attack_timer := 0.0
 var attack_range := 12.0
@@ -18,20 +19,31 @@ var callout_text := ""
 var spawn_position := Vector3.ZERO
 var patrol_phase := 0.0
 var state := "PATROL"
+var combat_phase := 0.0
+var preferred_range := 7.5
+var strafe_direction := 1.0
+var intelligence_bonus := 0
+var damage_multiplier := 1.0
+var last_seen_position := Vector3.ZERO
+var has_line_of_sight := false
+var lost_target_timer := 0.0
 
 func configure_country(country_name: String) -> void:
     country = country_name
     if is_instance_valid(body_mesh): _apply_country_look()
 
-func apply_support_bonus(damage_multiplier: float = 1.0, intelligence_bonus: int = 0) -> void:
-    # Allied intelligence makes enemies slightly less durable while keeping
-    # the mobile prototype balanced. Values are gameplay abstractions.
-    health = maxi(50, int(round(health / maxf(1.0, damage_multiplier))))
-    speed = maxf(1.5, speed - float(intelligence_bonus) * 0.003)
+func apply_support_bonus(incoming_damage_multiplier: float = 1.0, incoming_intelligence_bonus: int = 0) -> void:
+    damage_multiplier = maxf(1.0, incoming_damage_multiplier)
+    intelligence_bonus = maxi(0, incoming_intelligence_bonus)
+    health = maxi(50, int(round(max_health / damage_multiplier)))
+    speed = maxf(1.5, 2.2 - float(intelligence_bonus) * 0.003)
+    preferred_range = clampf(7.5 + float(intelligence_bonus) * 0.02, 6.0, 11.0)
 
 func _ready() -> void:
     spawn_position = global_position
     patrol_phase = float(get_instance_id() % 100) * 0.1
+    combat_phase = float(get_instance_id() % 17) * 0.37
+    strafe_direction = -1.0 if get_instance_id() % 2 == 0 else 1.0
     body_mesh = MeshInstance3D.new()
     var capsule := CapsuleMesh.new()
     capsule.radius = 0.45
@@ -73,7 +85,6 @@ func _country_color(uniform_id: String) -> Color:
         "modern_australian": Color("#56624f"), "modern_new_zealand": Color("#505c54")
     }
     if palette.has(uniform_id): return palette[uniform_id]
-    # Stable per-country fallback prevents every unprofiled nation from looking identical.
     var hash_value := absi(hash(uniform_id))
     var shade := 0.28 + float(hash_value % 35) / 100.0
     return Color(shade, shade + 0.03, shade - 0.01)
@@ -86,29 +97,87 @@ func _physics_process(delta: float) -> void:
     if not is_instance_valid(target): return
 
     attack_timer = maxf(0.0, attack_timer - delta)
+    combat_phase += delta
     var offset := target.global_position - global_position
     offset.y = 0
     var distance := offset.length()
+    has_line_of_sight = _has_line_of_sight()
+
+    if has_line_of_sight:
+        last_seen_position = target.global_position
+        lost_target_timer = 0.0
+    else:
+        lost_target_timer += delta
+
     if distance <= 16.0:
         state = "ATTACK" if distance <= attack_range else "CHASE"
+    elif not has_line_of_sight and lost_target_timer < 2.5:
+        state = "SEARCH"
     else:
         state = "PATROL"
 
-    if state == "PATROL":
-        patrol_phase += delta * 0.55
-        var patrol_target := spawn_position + Vector3(cos(patrol_phase) * 3.5, 0, sin(patrol_phase) * 3.5)
-        _move_toward(patrol_target, speed * 0.45)
-    elif state == "CHASE":
-        _move_toward(target.global_position, speed)
+    if health <= max_health * 0.3 and distance < 10.0:
+        state = "RETREAT"
+
+    match state:
+        "PATROL": _patrol(delta)
+        "SEARCH": _search()
+        "CHASE": _chase()
+        "ATTACK": _combat(delta, distance)
+        "RETREAT": _retreat()
+
+func _has_line_of_sight() -> bool:
+    var space := get_world_3d().direct_space_state
+    if space == null: return false
+    var from := global_position + Vector3.UP * 0.8
+    var to := target.global_position + Vector3.UP * 0.8
+    var query := PhysicsRayQueryParameters3D.create(from, to)
+    query.exclude = [self]
+    var hit := space.intersect_ray(query)
+    return not hit.has("collider") or hit.collider == target
+
+func _patrol(delta: float) -> void:
+    patrol_phase += delta * 0.55
+    var patrol_target := spawn_position + Vector3(cos(patrol_phase) * 3.5, 0, sin(patrol_phase) * 3.5)
+    _move_toward(patrol_target, speed * 0.45)
+
+func _search() -> void:
+    _move_toward(last_seen_position, speed * 0.8)
+
+func _chase() -> void:
+    _move_toward(target.global_position, speed * 1.15)
+
+func _combat(delta: float, distance: float) -> void:
+    var to_target := target.global_position - global_position
+    to_target.y = 0
+    if to_target.length() <= 0.01: return
+    var direction := to_target.normalized()
+    var side := Vector3(-direction.z, 0, direction.x) * strafe_direction
+    var desired := Vector3.ZERO
+    if distance > preferred_range + 1.0:
+        desired = direction
+    elif distance < preferred_range - 1.0:
+        desired = -direction * 0.65
+    desired += side * (0.45 + sin(combat_phase * 1.7) * 0.15)
+    if desired.length() > 0.05:
+        _move_toward(global_position + desired.normalized() * 2.0, speed)
     else:
         velocity = Vector3.ZERO
-        look_at(Vector3(target.global_position.x, global_position.y, target.global_position.z), Vector3.UP)
-        if attack_timer <= 0.0:
-            attack_timer = 1.0
-            callout_timer = 1.5
-            if target.has_method("take_damage"):
-                target.take_damage(8)
-                hit_player.emit(8)
+    look_at(Vector3(target.global_position.x, global_position.y, target.global_position.z), Vector3.UP)
+
+    if has_line_of_sight and attack_timer <= 0.0:
+        attack_timer = maxf(0.65, 1.0 - float(intelligence_bonus) * 0.004)
+        callout_timer = 1.5
+        if target.has_method("take_damage"):
+            var damage := maxi(3, int(round(8.0 / damage_multiplier)))
+            target.take_damage(damage)
+            hit_player.emit(damage)
+
+func _retreat() -> void:
+    var away := global_position - target.global_position
+    away.y = 0
+    if away.length() > 0.1:
+        _move_toward(global_position + away.normalized() * 3.0, speed * 1.1)
 
 func _move_toward(destination: Vector3, move_speed: float) -> void:
     var offset := destination - global_position
