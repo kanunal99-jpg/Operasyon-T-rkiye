@@ -92,6 +92,7 @@ func check_for_update() -> void:
     if request.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
         return
 
+    request.download_file = ""
     checking = true
     var cache_buster := str(Time.get_unix_time_from_system())
     var headers := PackedStringArray([
@@ -107,6 +108,7 @@ func check_for_update() -> void:
 func _on_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
     if downloading:
         downloading = false
+        request.download_file = ""
         if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
             _schedule_retry("Güncelleme indirilemedi. Tekrar denenecek.")
             return
@@ -167,7 +169,6 @@ func _start_update() -> void:
 
     DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://updates"))
     download_path = "user://updates/Operasyon-Turkiye-%s.apk" % pending_version
-    var absolute_path := ProjectSettings.globalize_path(download_path)
     if FileAccess.file_exists(download_path):
         _install_downloaded_update()
         return
@@ -183,6 +184,7 @@ func _start_update() -> void:
     ]), HTTPClient.METHOD_GET)
     if err != OK:
         downloading = false
+        request.download_file = ""
         update_button.disabled = false
         status_label.text = "İndirme başlatılamadı."
         return
@@ -201,14 +203,13 @@ func _install_downloaded_update() -> void:
         OS.shell_open(download_url)
         return
 
-    var absolute_path := ProjectSettings.globalize_path(download_path)
     if not FileAccess.file_exists(download_path):
         status_label.text = "Güncelleme dosyası bulunamadı."
         return
 
     update_button.disabled = true
     status_label.text = "Güncelleme hazır. Android kurulumu açılıyor..."
-    var started := bool(ota_plugin.installApk(absolute_path))
+    var started := bool(ota_plugin.installApk(ProjectSettings.globalize_path(download_path)))
     if not started:
         update_button.disabled = false
         status_label.text = "Kurulum başlatılamadı."
