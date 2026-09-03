@@ -1,0 +1,30 @@
+plugins {
+    id 'com.android.library'
+}
+
+android {
+    namespace 'com.operasyonturkiye.ota'
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 24
+        targetSdk 34
+        buildConfigField 'String', 'GODOT_PLUGIN_NAME', '"OperasyonTurkiyeOTA"'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    libraryVariants.all { variant ->
+        variant.outputs.all { output ->
+            outputFileName = "OperasyonTurkiyeOTA-${variant.name}.aar"
+        }
+    }
+}
+
+dependencies {
+    implementation 'org.godotengine:godot:4.3.0.stable'
+    implementation 'androidx.core:core:1.13.1'
+}
