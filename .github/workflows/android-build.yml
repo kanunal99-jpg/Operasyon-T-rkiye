@@ -86,6 +86,10 @@ jobs:
           grep -q 'gradle_build/use_gradle_build=false' export_presets.cfg
           ! grep -q 'gradle_build/min_sdk=' export_presets.cfg
           ! grep -q 'gradle_build/target_sdk=' export_presets.cfg
+          grep -q 'package/signed=true' export_presets.cfg
+          grep -q 'keystore/debug="/root/debug.keystore"' export_presets.cfg
+          grep -q 'keystore/debug_user="androiddebugkey"' export_presets.cfg
+          grep -q 'keystore/debug_password="android"' export_presets.cfg
           grep -q 'textures/vram_compression/import_etc2_astc=true' project.godot
           test -f ~/.config/godot/editor_settings-4.3.tres
           grep -q 'export/android/android_sdk_path = "/usr/lib/android-sdk"' ~/.config/godot/editor_settings-4.3.tres
@@ -118,8 +122,9 @@ jobs:
         run: |
           test -s build/Operasyon-Turkiye-debug.apk
           unzip -t build/Operasyon-Turkiye-debug.apk >/dev/null
-          "$ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner" verify --verbose build/Operasyon-Turkiye-debug.apk
-          echo "APK export verified successfully."
+          "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging build/Operasyon-Turkiye-debug.apk | grep -q 'package:'
+          "$ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner" verify --verbose --min-sdk-version 24 build/Operasyon-Turkiye-debug.apk
+          echo "APK export and Android signature verified successfully."
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
