@@ -2,6 +2,8 @@ extends CharacterBody3D
 
 signal hud_changed(health: int, ammo: int, reserve: int)
 signal weapon_changed(name: String)
+signal damage_feedback(amount: int, health: int)
+signal critical_health_changed(active: bool)
 
 class MobileJoystick extends Control:
     signal value_changed(value: Vector2)
@@ -84,6 +86,11 @@ var stand_height := 1.8
 var crouch_height := 1.15
 var current_height := 1.8
 var mobile_move := Vector2.ZERO
+var damage_overlay: ColorRect
+var critical_label: Label
+var damage_flash_timer := 0.0
+var critical_pulse := 0.0
+var critical_active := false
 
 func _ready() -> void:
     camera = Camera3D.new()
@@ -102,9 +109,29 @@ func _ready() -> void:
     camera.add_child(muzzle_flash)
     _create_collision()
     _create_mobile_movement_controls()
+    _create_damage_feedback()
     call_deferred("_hide_legacy_direction_buttons")
     _emit_hud()
     weapon_changed.emit(weapon_name)
+
+func _create_damage_feedback() -> void:
+    var layer := CanvasLayer.new()
+    layer.name = "DamageFeedback"
+    layer.layer = 30
+    add_child(layer)
+    damage_overlay = ColorRect.new()
+    damage_overlay.position = Vector2.ZERO
+    damage_overlay.size = Vector2(1280, 720)
+    damage_overlay.color = Color(0.75, 0.0, 0.0, 0.0)
+    damage_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    layer.add_child(damage_overlay)
+    critical_label = Label.new()
+    critical_label.text = "KRİTİK CAN • SIĞIN / GERİ ÇEKİL"
+    critical_label.position = Vector2(440, 90)
+    critical_label.size = Vector2(400, 55)
+    critical_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    critical_label.visible = false
+    layer.add_child(critical_label)
 
 func _hide_legacy_direction_buttons() -> void:
     var root := get_parent()
@@ -215,6 +242,17 @@ func _physics_process(delta: float) -> void:
     fire_cooldown = maxf(0.0, fire_cooldown - delta)
     reload_timer = maxf(0.0, reload_timer - delta)
     slide_timer = maxf(0.0, slide_timer - delta)
+    damage_flash_timer = maxf(0.0, damage_flash_timer - delta)
+    if damage_overlay != null:
+        var flash_alpha := clampf(damage_flash_timer * 4.5, 0.0, 0.38)
+        damage_overlay.color.a = flash_alpha
+    if health <= 25:
+        critical_pulse += delta
+        if critical_label != null:
+            critical_label.visible = true
+            critical_label.modulate.a = 0.55 + 0.45 * (0.5 + 0.5 * sin(critical_pulse * 5.0))
+    elif critical_label != null:
+        critical_label.visible = false
 
     var keyboard_input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
     var input_vec := mobile_move if mobile_move.length() > 0.05 else keyboard_input
@@ -323,7 +361,14 @@ func reload() -> void:
     _emit_hud()
 
 func take_damage(amount: int) -> void:
-    health -= amount
+    var applied := maxi(0, amount)
+    health = maxi(0, health - applied)
+    damage_flash_timer = 0.22
+    damage_feedback.emit(applied, health)
+    var now_critical := health > 0 and health <= 25
+    if now_critical != critical_active:
+        critical_active = now_critical
+        critical_health_changed.emit(critical_active)
     _emit_hud()
     if health <= 0:
         health = 100
@@ -336,6 +381,8 @@ func take_damage(amount: int) -> void:
         camera.rotation = Vector3.ZERO
         aim_pressed = false
         camera.fov = 78.0
+        critical_active = false
+        critical_health_changed.emit(false)
         _emit_hud()
 
 func _emit_hud() -> void:
