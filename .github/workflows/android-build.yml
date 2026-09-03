@@ -92,7 +92,7 @@ jobs:
         shell: sh
         run: |
           set -eu
-          godot --headless --path . --editor --install-android-build-template --quit
+          godot --headless --path . --editor --install-android-build-template
           test -d android/build
           test -f android/build.gradle
       - name: Import project
