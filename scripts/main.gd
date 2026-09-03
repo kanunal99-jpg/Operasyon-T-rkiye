@@ -10,12 +10,16 @@ const CityArena = preload("res://scripts/city_arena.gd")
 const MissionManager = preload("res://scripts/mission_manager.gd")
 const GameManager = preload("res://scripts/game_manager.gd")
 const SaveManager = preload("res://scripts/save_manager.gd")
+const AllianceManager = preload("res://scripts/alliance_manager.gd")
+const NewsCutsceneManager = preload("res://scripts/news_cutscene_manager.gd")
 
 var player: CharacterBody3D
 var city_arena: Node3D
 var mission_manager: Node
 var game_manager: Node
 var save_manager: Node
+var alliance_manager: Node
+var news_cutscene: CanvasLayer
 var score := 0
 var mission_id := 1
 var operation_index := 0
@@ -32,14 +36,26 @@ var map_label: Label
 var country_list: VBoxContainer
 var operation_list: VBoxContainer
 var language_button: Button
+var alliance_button: Button
 var map_open := false
 var selected_voice := "tr"
+var alliance_candidate_index := 0
 var spawned_enemies: Array[Node] = []
 var mission_finished := false
 
 func _ready() -> void:
     save_manager = SaveManager.new()
     add_child(save_manager)
+    for saved_country in save_manager.unlocked_countries:
+        GlobalMap.unlock_country(str(saved_country))
+    if save_manager.selected_country != "" and GlobalMap.is_unlocked(save_manager.selected_country):
+        GlobalMap.select_country(save_manager.selected_country)
+
+    alliance_manager = AllianceManager.new()
+    add_child(alliance_manager)
+    news_cutscene = NewsCutsceneManager.new()
+    add_child(news_cutscene)
+
     _build_world()
     _spawn_player()
     _build_hud()
@@ -55,14 +71,14 @@ func _ready() -> void:
     game_manager.mission_changed.connect(_on_game_mission_changed)
     player.hud_changed.connect(_on_player_hud_changed)
     player.weapon_changed.connect(_on_weapon_changed)
+    alliance_manager.diplomacy_changed.connect(_on_diplomacy_changed)
     _on_player_hud_changed(player.health, player.ammo, player.reserve_ammo)
     _on_weapon_changed(player.weapon_name)
     score = save_manager.score
-    if save_manager.selected_country != "" and GlobalMap.is_unlocked(save_manager.selected_country):
-        GlobalMap.select_country(save_manager.selected_country)
     operation_index = save_manager.selected_operation
     _refresh_country_list()
     _refresh_operation_list()
+    _update_alliance_button()
     _select_operation(operation_index)
 
 func _process(_delta: float) -> void:
@@ -136,7 +152,8 @@ func _build_hud() -> void:
     country_list = VBoxContainer.new(); country_list.position = Vector2(25,65); country_list.size = Vector2(720,260); map_panel.add_child(country_list)
     operation_list = VBoxContainer.new(); operation_list.position = Vector2(25,330); operation_list.size = Vector2(720,170); map_panel.add_child(operation_list)
     language_button = Button.new(); language_button.position = Vector2(25,555); language_button.size = Vector2(350,48); language_button.pressed.connect(_cycle_voice_language); map_panel.add_child(language_button)
-    _refresh_country_list(); _refresh_operation_list(); _update_voice_button()
+    alliance_button = Button.new(); alliance_button.position = Vector2(395,555); alliance_button.size = Vector2(350,48); alliance_button.pressed.connect(_propose_next_alliance); map_panel.add_child(alliance_button)
+    _refresh_country_list(); _refresh_operation_list(); _update_voice_button(); _update_alliance_button()
     _add_hold_button(hud,"▲",Vector2(125,510),"move_forward"); _add_hold_button(hud,"▼",Vector2(125,600),"move_back"); _add_hold_button(hud,"◀",Vector2(35,555),"move_left"); _add_hold_button(hud,"▶",Vector2(215,555),"move_right")
     var fire := Button.new(); fire.text = "ATEŞ"; fire.position = Vector2(1080,545); fire.size = Vector2(150,100); fire.button_down.connect(func(): player.touch_fire=true); fire.button_up.connect(func(): player.touch_fire=false); hud.add_child(fire)
     var reload := Button.new(); reload.text = "ŞARJÖR"; reload.position = Vector2(930,585); reload.size = Vector2(130,70); reload.pressed.connect(func(): player.reload()); hud.add_child(reload)
@@ -173,7 +190,7 @@ func _select_operation(index: int) -> void:
     mission_finished = false
     mission_label.text = "%s • %s" % [op[0],op[1]]
     status_label.text = "GÖREV: %s" % op[2]
-    map_label.text = "%s → %s\n%s" % [GlobalMap.selected_country,op[0],op[2]]
+    map_label.text = "%s → %s\n%s\n%s" % [GlobalMap.selected_country,op[0],op[2],alliance_manager.get_support_summary(GlobalMap.selected_country)]
     _rebuild_city()
     if is_instance_valid(save_manager):
         save_manager.selected_country = GlobalMap.selected_country
@@ -183,12 +200,15 @@ func _select_operation(index: int) -> void:
     if is_instance_valid(game_manager):
         game_manager.start_mission(int(op[3]))
         _spawn_wave(game_manager.base_enemy_count)
+    if is_instance_valid(news_cutscene):
+        news_cutscene.play_briefing(GlobalMap.selected_country, op[0], op[1], alliance_manager.get_allies(GlobalMap.selected_country).size())
 
 func _select_country(country: String) -> void:
     if GlobalMap.select_country(country):
         operation_index = 0
+        alliance_candidate_index = 0
         selected_voice = CountryProfile.get_profile(country).voice
-        _refresh_country_list(); _refresh_operation_list(); _select_operation(0); _update_voice_button()
+        _refresh_country_list(); _refresh_operation_list(); _select_operation(0); _update_voice_button(); _update_alliance_button()
 
 func _cycle_voice_language() -> void:
     var profile := CountryProfile.get_profile(GlobalMap.selected_country)
@@ -201,9 +221,44 @@ func _update_voice_button() -> void:
     var profile := CountryProfile.get_profile(GlobalMap.selected_country)
     language_button.text = "SES / DUBLAJ: %s" % ("TÜRKÇE" if selected_voice == "tr" else profile.language.to_upper())
 
+func _get_alliance_candidates() -> Array:
+    var candidates: Array = []
+    for item in GlobalMap.COUNTRIES:
+        var country := str(item[0])
+        if country != GlobalMap.selected_country and alliance_manager.can_form_alliance(GlobalMap.selected_country, country):
+            candidates.append(country)
+    return candidates
+
+func _update_alliance_button() -> void:
+    if not is_instance_valid(alliance_button): return
+    var candidates := _get_alliance_candidates()
+    if candidates.is_empty():
+        alliance_button.text = "İTTİFAK: UYGUN TEKLİF YOK"
+        alliance_button.disabled = true
+        return
+    alliance_candidate_index = clampi(alliance_candidate_index, 0, candidates.size() - 1)
+    var candidate := candidates[alliance_candidate_index]
+    alliance_button.text = "İTTİFAK TEKLİFİ: %s" % candidate
+    alliance_button.disabled = false
+
+func _propose_next_alliance() -> void:
+    var candidates := _get_alliance_candidates()
+    if candidates.is_empty():
+        _update_alliance_button()
+        return
+    var candidate := candidates[alliance_candidate_index]
+    alliance_manager.propose_alliance(GlobalMap.selected_country, candidate)
+    alliance_candidate_index = (alliance_candidate_index + 1) % candidates.size()
+    _update_alliance_button()
+    map_label.text = "%s\n%s" % [GlobalMap.selected_country, alliance_manager.get_support_summary(GlobalMap.selected_country)]
+
+func _on_diplomacy_changed(message: String) -> void:
+    if is_instance_valid(status_label): status_label.text = message
+    _update_alliance_button()
+
 func _toggle_world_map() -> void:
     map_open = not map_open; map_panel.visible = map_open
-    if map_open: _refresh_country_list(); _refresh_operation_list()
+    if map_open: _refresh_country_list(); _refresh_operation_list(); _update_alliance_button()
 
 func _add_hold_button(hud: CanvasLayer,text: String,pos: Vector2,action: String) -> void:
     var button := Button.new(); button.text=text; button.position=pos; button.size=Vector2(80,80); button.button_down.connect(func(): Input.action_press(action)); button.button_up.connect(func(): Input.action_release(action)); hud.add_child(button)
@@ -263,6 +318,7 @@ func _finish_operation() -> void:
     _refresh_operation_list()
 
 func _on_mission_completed(_reward: int) -> void:
-    # Kill objective completion no longer ends the operation early.
+    # Kill/reach/survive objective completion does not end the operation early;
+    # the wave manager owns final operation completion.
     if is_instance_valid(game_manager) and game_manager.active:
         status_label.text="ANA HEDEF TAMAM • DALGALAR DEVAM EDİYOR"
