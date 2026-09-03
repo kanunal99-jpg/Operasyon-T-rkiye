@@ -14,67 +14,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Apply deterministic repairs
-        shell: python
+        shell: sh
         run: |
-          from pathlib import Path
+          set -eu
+          sed -i 's/var countries := global_map.countries_by_continent(selected_continent)/var countries: Array = global_map.countries_by_continent(selected_continent)/' scripts/content_controller.gd
+          sed -i 's/var unlocked := global_map.is_unlocked(country_name)/var unlocked: bool = global_map.is_unlocked(country_name)/' scripts/content_controller.gd
+          sed -i 's/var completed := save.is_operation_completed(selected_country, i)/var completed: bool = save.is_operation_completed(selected_country, i)/' scripts/content_controller.gd
+          sed -i 's/var waves := controller.get("waves")/var waves: Node = controller.get("waves")/' scripts/game_polish_manager.gd
+          sed -i 's/var mission := controller.get("mission")/var mission: Node = controller.get("mission")/' scripts/game_polish_manager.gd
+          sed -i 's/var layer := player.get("mobile_controls")/var layer: Control = player.get("mobile_controls")/' scripts/game_polish_manager.gd
+          sed -i 's/var map_open := is_instance_valid(map_menu) and map_menu.visible/var map_open: bool = is_instance_valid(map_menu) and map_menu.visible/' scripts/game_polish_manager.gd
+          sed -i 's/\[node name="GamePolishManager" type="Node"\]/[node name="GamePolishManager" type="Node" parent="."]/' main.tscn
+          sed -i 's/\[node name="UpdateManager" type="Node"\]/[node name="UpdateManager" type="Node" parent="."]/' main.tscn
+          sed -i 's/android:name="androidx.core.content.FileProvider"/android:name="com.operasyonturkiye.ota.OperasyonTurkiyeFileProvider"/' android_ota/plugin/src/main/AndroidManifest.xml
+          sed -i '/tools:replace="android:resource"/d' android_ota/plugin/src/main/AndroidManifest.xml
+          sed -i 's/            tools:replace="android:authorities">/            >/' android_ota/plugin/src/main/AndroidManifest.xml
+          cat > android_ota/plugin/src/main/java/com/operasyonturkiye/ota/OperasyonTurkiyeFileProvider.java <<'EOF'
+package com.operasyonturkiye.ota;
 
-          def replace(path, old, new):
-              p = Path(path)
-              s = p.read_text(encoding='utf-8')
-              if old not in s:
-                  raise SystemExit(f'Missing expected text in {path}: {old!r}')
-              p.write_text(s.replace(old, new), encoding='utf-8')
-
-          replace('scripts/content_controller.gd',
-                  'var countries := global_map.countries_by_continent(selected_continent)',
-                  'var countries: Array = global_map.countries_by_continent(selected_continent)')
-          replace('scripts/content_controller.gd',
-                  'var unlocked := global_map.is_unlocked(country_name)',
-                  'var unlocked: bool = global_map.is_unlocked(country_name)')
-          replace('scripts/content_controller.gd',
-                  'var completed := save.is_operation_completed(selected_country, i)',
-                  'var completed: bool = save.is_operation_completed(selected_country, i)')
-
-          replace('scripts/update_manager.gd',
-                  'var file_size := FileAccess.get_length(download_path)',
-                  'var file := FileAccess.open(download_path, FileAccess.READ)\n        if file == null:\n            _remove_download()\n            _schedule_retry("Güncelleme dosyası okunamadı.")\n            return\n        var file_size: int = file.get_length()\n        file.close()')
-
-          replace('scripts/game_polish_manager.gd',
-                  'var waves := controller.get("waves")',
-                  'var waves: Node = controller.get("waves")')
-          replace('scripts/game_polish_manager.gd',
-                  'var mission := controller.get("mission")',
-                  'var mission: Node = controller.get("mission")')
-          replace('scripts/game_polish_manager.gd',
-                  'var layer := player.get("mobile_controls")',
-                  'var layer: Control = player.get("mobile_controls")')
-          replace('scripts/game_polish_manager.gd',
-                  'var map_open := is_instance_valid(map_menu) and map_menu.visible',
-                  'var map_open: bool = is_instance_valid(map_menu) and map_menu.visible')
-
-          p = Path('main.tscn')
-          s = p.read_text(encoding='utf-8')
-          s = s.replace('[node name="GamePolishManager" type="Node"]', '[node name="GamePolishManager" type="Node" parent="."]')
-          s = s.replace('[node name="UpdateManager" type="Node"]', '[node name="UpdateManager" type="Node" parent="."]')
-          p.write_text(s, encoding='utf-8')
-
-          manifest = Path('android_ota/plugin/src/main/AndroidManifest.xml')
-          s = manifest.read_text(encoding='utf-8')
-          s = s.replace('android:name="androidx.core.content.FileProvider"', 'android:name="com.operasyonturkiye.ota.OperasyonTurkiyeFileProvider"')
-          s = s.replace('                tools:replace="android:resource"\n', '')
-          s = s.replace('            tools:replace="android:authorities">\n', '            >\n')
-          manifest.write_text(s, encoding='utf-8')
-
-          provider = Path('android_ota/plugin/src/main/java/com/operasyonturkiye/ota/OperasyonTurkiyeFileProvider.java')
-          provider.write_text('package com.operasyonturkiye.ota;\n\npublic class OperasyonTurkiyeFileProvider extends androidx.core.content.FileProvider {\n}\n', encoding='utf-8')
-
-          java = Path('android_ota/plugin/src/main/java/com/operasyonturkiye/ota/GodotAndroidPlugin.java')
-          s = java.read_text(encoding='utf-8')
-          s = s.replace('import androidx.core.content.FileProvider;\n', '')
-          s = s.replace('FileProvider.getUriForFile(', 'OperasyonTurkiyeFileProvider.getUriForFile(')
-          java.write_text(s, encoding='utf-8')
+public class OperasyonTurkiyeFileProvider extends androidx.core.content.FileProvider {
+}
+EOF
+          sed -i '/import androidx.core.content.FileProvider;/d' android_ota/plugin/src/main/java/com/operasyonturkiye/ota/GodotAndroidPlugin.java
+          sed -i 's/FileProvider\.getUriForFile(/OperasyonTurkiyeFileProvider.getUriForFile(/' android_ota/plugin/src/main/java/com/operasyonturkiye/ota/GodotAndroidPlugin.java
       - name: Validate changes
         run: |
+          set -eu
           grep -q 'var countries: Array' scripts/content_controller.gd
           grep -q 'var unlocked: bool' scripts/content_controller.gd
           grep -q 'var completed: bool' scripts/content_controller.gd
@@ -84,6 +49,7 @@ jobs:
           grep -q 'var map_open: bool' scripts/game_polish_manager.gd
           grep -q 'parent="."' main.tscn
           grep -q 'OperasyonTurkiyeFileProvider' android_ota/plugin/src/main/AndroidManifest.xml
+          grep -q 'OperasyonTurkiyeFileProvider.getUriForFile' android_ota/plugin/src/main/java/com/operasyonturkiye/ota/GodotAndroidPlugin.java
           test -s android_ota/plugin/src/main/java/com/operasyonturkiye/ota/OperasyonTurkiyeFileProvider.java
       - name: Commit repairs
         run: |
