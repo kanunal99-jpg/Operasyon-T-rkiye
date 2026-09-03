@@ -71,7 +71,7 @@ func _spawn_player() -> void:
     add_child(player)
 
 func _spawn_enemies() -> void:
-    var positions := [Vector3(-9,1, -10), Vector3(9,1,-10), Vector3(-14,1,10), Vector3(14,1,1), Vector3(0,1,-17)]
+    var positions := [Vector3(-9,1,-10), Vector3(9,1,-10), Vector3(-14,1,10), Vector3(14,1,1), Vector3(0,1,-17)]
     for p in positions:
         var enemy := CharacterBody3D.new()
         enemy.set_script(Enemy)
@@ -97,6 +97,11 @@ func _build_hud() -> void:
     status_label.text = "OPERASYON BAŞLADI"
     hud.add_child(status_label)
 
+    _add_hold_button(hud, "▲", Vector2(125, 535), "move_forward")
+    _add_hold_button(hud, "▼", Vector2(125, 625), "move_back")
+    _add_hold_button(hud, "◀", Vector2(35, 580), "move_left")
+    _add_hold_button(hud, "▶", Vector2(215, 580), "move_right")
+
     var fire := Button.new()
     fire.text = "ATEŞ"
     fire.position = Vector2(1080, 560)
@@ -114,10 +119,20 @@ func _build_hud() -> void:
     hud.add_child(reload)
 
     var hint := Label.new()
-    hint.position = Vector2(28, 650)
-    hint.text = "PC: WASD + fare | Mobil: ekrandaki kontroller"
+    hint.position = Vector2(28, 680)
+    hint.text = "MOBİL: yön tuşları + ATEŞ | PC: WASD + fare"
     hint.add_theme_font_size_override("font_size", 16)
     hud.add_child(hint)
+
+func _add_hold_button(hud: CanvasLayer, text: String, pos: Vector2, action: String) -> void:
+    var button := Button.new()
+    button.text = text
+    button.position = pos
+    button.size = Vector2(80, 80)
+    button.add_theme_font_size_override("font_size", 28)
+    button.button_down.connect(func(): Input.action_press(action))
+    button.button_up.connect(func(): Input.action_release(action))
+    hud.add_child(button)
 
 func _on_enemy_died() -> void:
     score += 100
