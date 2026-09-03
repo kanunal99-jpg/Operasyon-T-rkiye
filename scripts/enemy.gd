@@ -21,6 +21,13 @@ var state := "PATROL"
 
 func configure_country(country_name: String) -> void:
     country = country_name
+    if is_instance_valid(body_mesh): _apply_country_look()
+
+func apply_support_bonus(damage_multiplier: float = 1.0, intelligence_bonus: int = 0) -> void:
+    # Allied intelligence makes enemies slightly less durable while keeping
+    # the mobile prototype balanced. Values are gameplay abstractions.
+    health = maxi(50, int(round(health / maxf(1.0, damage_multiplier))))
+    speed = maxf(1.5, speed - float(intelligence_bonus) * 0.003)
 
 func _ready() -> void:
     spawn_position = global_position
@@ -43,7 +50,7 @@ func _ready() -> void:
 func _apply_country_look() -> void:
     var profile := CountryProfile.get_profile(country)
     var material := StandardMaterial3D.new()
-    material.albedo_color = _country_color(profile.uniform)
+    material.albedo_color = _country_color(str(profile.get("uniform", "generic_modern")))
     material.roughness = 0.78
     body_mesh.material_override = material
     callout_text = CountryProfile.get_callout(country, "contact")
@@ -65,23 +72,23 @@ func _country_color(uniform_id: String) -> Color:
         "modern_south_korean": Color("#4e5a62"), "modern_indonesian": Color("#53614f"),
         "modern_australian": Color("#56624f"), "modern_new_zealand": Color("#505c54")
     }
-    return palette.get(uniform_id, Color("#56605a"))
+    if palette.has(uniform_id): return palette[uniform_id]
+    # Stable per-country fallback prevents every unprofiled nation from looking identical.
+    var hash_value := absi(hash(uniform_id))
+    var shade := 0.28 + float(hash_value % 35) / 100.0
+    return Color(shade, shade + 0.03, shade - 0.01)
 
 func _physics_process(delta: float) -> void:
     if hit_flash_timer > 0.0:
         hit_flash_timer = maxf(0.0, hit_flash_timer - delta)
-        if hit_flash_timer == 0.0:
-            _apply_country_look()
-    if callout_timer > 0.0:
-        callout_timer = maxf(0.0, callout_timer - delta)
-    if not is_instance_valid(target):
-        return
+        if hit_flash_timer == 0.0: _apply_country_look()
+    if callout_timer > 0.0: callout_timer = maxf(0.0, callout_timer - delta)
+    if not is_instance_valid(target): return
 
     attack_timer = maxf(0.0, attack_timer - delta)
     var offset := target.global_position - global_position
     offset.y = 0
     var distance := offset.length()
-
     if distance <= 16.0:
         state = "ATTACK" if distance <= attack_range else "CHASE"
     else:
