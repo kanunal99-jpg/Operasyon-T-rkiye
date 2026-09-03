@@ -25,18 +25,21 @@ jobs:
 
       - name: Prepare Android SDK
         run: |
-          export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/opt/android-sdk}}"
+          export ANDROID_SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/lib/android-sdk}}"
           export ANDROID_HOME="$ANDROID_SDK_ROOT"
-          if [ ! -x "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
-            echo "Android sdkmanager not found at $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-            find "$ANDROID_SDK_ROOT" -maxdepth 5 -type f -name sdkmanager -print || true
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            echo "Android sdkmanager not found at $SDKMANAGER"
+            find /usr/lib/android-sdk /opt/android-sdk -maxdepth 6 -type f -name sdkmanager -print 2>/dev/null || true
             exit 1
           fi
-          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-33" "build-tools;33.0.2"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "sdkmanager=$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-33" "build-tools;33.0.2"
           test -d "$ANDROID_SDK_ROOT/platforms/android-33"
           test -x "$ANDROID_SDK_ROOT/build-tools/33.0.2/aapt2"
-          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --list | grep -E 'platforms;android-33|build-tools;33.0.2' | head -20
+          "$ANDROID_SDK_ROOT/platform-tools/adb" version
 
       - name: Import project
         run: godot --headless --editor --quit --path .
@@ -49,7 +52,7 @@ jobs:
           grep -q 'gradle_build/use_gradle_build=false' export_presets.cfg
           ! grep -q 'gradle_build/min_sdk=' export_presets.cfg
           ! grep -q 'gradle_build/target_sdk=' export_presets.cfg
-          export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/opt/android-sdk}}"
+          export ANDROID_SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/lib/android-sdk}}"
           test -d "$ANDROID_SDK_ROOT/platforms/android-33"
           test -x "$ANDROID_SDK_ROOT/build-tools/33.0.2/aapt2"
 
