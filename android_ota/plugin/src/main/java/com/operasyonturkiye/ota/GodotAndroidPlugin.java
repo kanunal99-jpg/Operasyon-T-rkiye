@@ -33,7 +33,7 @@ public class GodotAndroidPlugin extends GodotPlugin {
 
     @UsedByGodot
     public void openInstallPermissionSettings() {
-        runOnHostThread(() -> {
+        runOnUiThread(() -> {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 Intent intent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES);
                 intent.setData(Uri.parse("package:" + getActivity().getPackageName()));
@@ -49,7 +49,7 @@ public class GodotAndroidPlugin extends GodotPlugin {
             return false;
         }
 
-        runOnHostThread(() -> {
+        runOnUiThread(() -> {
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !canInstallPackages()) {
                     openInstallPermissionSettings();
