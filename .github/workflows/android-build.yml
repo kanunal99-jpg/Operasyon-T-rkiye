@@ -25,8 +25,9 @@ jobs:
           lfs: true
 
       - name: Normalize Godot source before export
-        shell: python
+        shell: sh
         run: |
+          python3 - <<'PY'
           from pathlib import Path
 
           def replace(path, old, new):
@@ -36,31 +37,11 @@ jobs:
                   raise SystemExit(f"Missing expected text in {path}: {old!r}")
               p.write_text(s.replace(old, new), encoding="utf-8")
 
-          replace(
-              "scripts/content_controller.gd",
-              "var countries := global_map.countries_by_continent(selected_continent)",
-              "var countries: Array = global_map.countries_by_continent(selected_continent)",
-          )
-          replace(
-              "scripts/content_controller.gd",
-              "var unlocked := global_map.is_unlocked(country_name)",
-              "var unlocked: bool = global_map.is_unlocked(country_name)",
-          )
-          replace(
-              "scripts/content_controller.gd",
-              "var completed := save.is_operation_completed(selected_country, i)",
-              "var completed: bool = save.is_operation_completed(selected_country, i)",
-          )
-          replace(
-              "main.tscn",
-              '[node name="GamePolishManager" type="Node"]',
-              '[node name="GamePolishManager" type="Node" parent="."]',
-          )
-          replace(
-              "main.tscn",
-              '[node name="UpdateManager" type="Node"]',
-              '[node name="UpdateManager" type="Node" parent="."]',
-          )
+          replace("scripts/content_controller.gd", "var countries := global_map.countries_by_continent(selected_continent)", "var countries: Array = global_map.countries_by_continent(selected_continent)")
+          replace("scripts/content_controller.gd", "var unlocked := global_map.is_unlocked(country_name)", "var unlocked: bool = global_map.is_unlocked(country_name)")
+          replace("scripts/content_controller.gd", "var completed := save.is_operation_completed(selected_country, i)", "var completed: bool = save.is_operation_completed(selected_country, i)")
+          replace("main.tscn", '[node name="GamePolishManager" type="Node"]', '[node name="GamePolishManager" type="Node" parent="."]')
+          replace("main.tscn", '[node name="UpdateManager" type="Node"]', '[node name="UpdateManager" type="Node" parent="."]')
 
           checks = [
               ("scripts/content_controller.gd", "var countries: Array"),
@@ -78,6 +59,7 @@ jobs:
               if needle not in Path(path).read_text(encoding="utf-8"):
                   raise SystemExit(f"Repair verification failed: {path}: {needle!r}")
           print("Godot source normalization verified.")
+          PY
 
       - name: Prepare Android SDK
         run: |
@@ -86,13 +68,7 @@ jobs:
           test -d "$JAVA_HOME"
           java -version
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" --install \
-            "platform-tools" \
-            "platforms;android-34" \
-            "build-tools;34.0.0" \
-            "cmdline-tools;latest" \
-            "cmake;3.10.2.4988404" \
-            "ndk;23.2.8568313"
+          "$SDKMANAGER" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0" "cmdline-tools;latest" "cmake;3.10.2.4988404" "ndk;23.2.8568313"
           test -x "$ANDROID_SDK_ROOT/platform-tools/adb"
           test -d "$ANDROID_SDK_ROOT/platforms/android-34"
           test -x "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt"
