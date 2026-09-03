@@ -1,0 +1,28 @@
+name: Android Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.3.3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Import project
+        run: godot --headless --editor --quit --path .
+
+      - name: Build debug APK
+        run: mkdir -p build && godot --headless --path . --export-debug "Android" build/Operasyon-Turkiye-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Operasyon-Turkiye-Android
+          path: build/Operasyon-Turkiye-debug.apk
+          if-no-files-found: error
