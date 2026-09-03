@@ -57,7 +57,7 @@ jobs:
       - name: Configure Godot Android editor settings
         run: |
           mkdir -p ~/.config/godot
-          cat > ~/.config/godot/editor_settings-4.tres <<EOF
+          cat > ~/.config/godot/editor_settings-4.3.tres <<EOF
           [gd_resource type="EditorSettings" format=3]
 
           [resource]
@@ -67,9 +67,9 @@ jobs:
           export/android/debug_keystore_user = "androiddebugkey"
           export/android/debug_keystore_pass = "android"
           EOF
-          test -f ~/.config/godot/editor_settings-4.tres
-          grep -q "export/android/android_sdk_path = \"$ANDROID_SDK_ROOT\"" ~/.config/godot/editor_settings-4.tres
-          grep -q "export/android/java_sdk_path = \"$JAVA_HOME\"" ~/.config/godot/editor_settings-4.tres
+          test -f ~/.config/godot/editor_settings-4.3.tres
+          grep -q "export/android/android_sdk_path = \"$ANDROID_SDK_ROOT\"" ~/.config/godot/editor_settings-4.3.tres
+          grep -q "export/android/java_sdk_path = \"$JAVA_HOME\"" ~/.config/godot/editor_settings-4.3.tres
           test -f /root/debug.keystore
 
       - name: Import project
@@ -83,8 +83,8 @@ jobs:
           ! grep -q 'gradle_build/min_sdk=' export_presets.cfg
           ! grep -q 'gradle_build/target_sdk=' export_presets.cfg
           grep -q 'textures/vram_compression/import_etc2_astc=true' project.godot
-          grep -q "export/android/android_sdk_path = \"$ANDROID_SDK_ROOT\"" ~/.config/godot/editor_settings-4.tres
-          grep -q "export/android/java_sdk_path = \"$JAVA_HOME\"" ~/.config/godot/editor_settings-4.tres
+          grep -q "export/android/android_sdk_path = \"$ANDROID_SDK_ROOT\"" ~/.config/godot/editor_settings-4.3.tres
+          grep -q "export/android/java_sdk_path = \"$JAVA_HOME\"" ~/.config/godot/editor_settings-4.3.tres
           test -d "$ANDROID_SDK_ROOT/platforms/android-34"
           test -x "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt"
           test -x "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt2"
