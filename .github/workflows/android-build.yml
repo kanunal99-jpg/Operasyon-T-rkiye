@@ -117,8 +117,8 @@ jobs:
       - name: Verify APK
         run: |
           test -s build/Operasyon-Turkiye-debug.apk
-          file build/Operasyon-Turkiye-debug.apk
           unzip -t build/Operasyon-Turkiye-debug.apk >/dev/null
+          "$ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner" verify --verbose build/Operasyon-Turkiye-debug.apk
           echo "APK export verified successfully."
 
       - name: Upload APK
