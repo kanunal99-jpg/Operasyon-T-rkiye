@@ -23,20 +23,18 @@ jobs:
 
       - name: Prepare Godot export templates
         run: |
-          mkdir -p ~/.local/share/godot/export_templates/
-          mkdir -p ~/.config/godot
-          if [ -d /root/.config/godot ]; then cp -a /root/.config/godot/. ~/.config/godot/; fi
-          if [ -d /root/.local/share/godot/export_templates/4.3.stable ]; then cp -a /root/.local/share/godot/export_templates/4.3.stable ~/.local/share/godot/export_templates/; fi
-          test -d ~/.local/share/godot/export_templates/4.3.stable
+          mkdir -p ~/.local/share/godot/export_templates/4.3.stable
+          test -f /root/.local/share/godot/export_templates/4.3.stable/android_debug.apk
+          test -f /root/.local/share/godot/export_templates/4.3.stable/android_release.apk
+          cp -a /root/.local/share/godot/export_templates/4.3.stable/. ~/.local/share/godot/export_templates/4.3.stable/
+          test -s ~/.local/share/godot/export_templates/4.3.stable/android_debug.apk
+          test -s ~/.local/share/godot/export_templates/4.3.stable/android_release.apk
 
       - name: Prepare Android SDK
         run: |
           SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools/bin/sdkmanager"
           test -x "$SDKMANAGER"
           test -d "$JAVA_HOME"
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          echo "JAVA_HOME=$JAVA_HOME"
           java -version
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" --install \
@@ -46,15 +44,15 @@ jobs:
             "cmdline-tools;latest" \
             "cmake;3.10.2.4988404" \
             "ndk;23.2.8568313"
+          test -x "$ANDROID_SDK_ROOT/platform-tools/adb"
           test -d "$ANDROID_SDK_ROOT/platforms/android-34"
           test -x "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt"
           test -x "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt2"
           test -x "$ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner"
           test -d "$ANDROID_SDK_ROOT/ndk/23.2.8568313"
           test -d "$ANDROID_SDK_ROOT/cmake/3.10.2.4988404"
-          "$ANDROID_SDK_ROOT/platform-tools/adb" version
 
-      - name: Configure Godot Android editor settings
+      - name: Configure Godot 4.3 Android editor settings
         run: |
           mkdir -p ~/.config/godot
           cat > ~/.config/godot/editor_settings-4.3.tres <<EOF
@@ -66,14 +64,20 @@ jobs:
           export/android/debug_keystore = "/root/debug.keystore"
           export/android/debug_keystore_user = "androiddebugkey"
           export/android/debug_keystore_pass = "android"
+          export/android/force_system_user = false
+          export/android/timestamping_authority_url = ""
+          export/android/shutdown_adb_on_exit = true
           EOF
           test -f ~/.config/godot/editor_settings-4.3.tres
-          grep -q "export/android/android_sdk_path = \"$ANDROID_SDK_ROOT\"" ~/.config/godot/editor_settings-4.3.tres
-          grep -q "export/android/java_sdk_path = \"$JAVA_HOME\"" ~/.config/godot/editor_settings-4.3.tres
           test -f /root/debug.keystore
+          grep -q 'export/android/android_sdk_path = "/usr/lib/android-sdk"' ~/.config/godot/editor_settings-4.3.tres
+          grep -q 'export/android/java_sdk_path = "/usr/lib/jvm/java-17-openjdk-amd64"' ~/.config/godot/editor_settings-4.3.tres
+          grep -q 'export/android/force_system_user = false' ~/.config/godot/editor_settings-4.3.tres
 
       - name: Import project
-        run: godot --headless --editor --quit --path .
+        run: |
+          rm -rf .godot
+          godot --headless --editor --path . --import --quit
 
       - name: Validate Android export setup
         run: |
@@ -83,8 +87,13 @@ jobs:
           ! grep -q 'gradle_build/min_sdk=' export_presets.cfg
           ! grep -q 'gradle_build/target_sdk=' export_presets.cfg
           grep -q 'textures/vram_compression/import_etc2_astc=true' project.godot
-          grep -q "export/android/android_sdk_path = \"$ANDROID_SDK_ROOT\"" ~/.config/godot/editor_settings-4.3.tres
-          grep -q "export/android/java_sdk_path = \"$JAVA_HOME\"" ~/.config/godot/editor_settings-4.3.tres
+          test -f ~/.config/godot/editor_settings-4.3.tres
+          grep -q 'export/android/android_sdk_path = "/usr/lib/android-sdk"' ~/.config/godot/editor_settings-4.3.tres
+          grep -q 'export/android/java_sdk_path = "/usr/lib/jvm/java-17-openjdk-amd64"' ~/.config/godot/editor_settings-4.3.tres
+          grep -q 'export/android/debug_keystore = "/root/debug.keystore"' ~/.config/godot/editor_settings-4.3.tres
+          test -f /root/debug.keystore
+          test -s ~/.local/share/godot/export_templates/4.3.stable/android_debug.apk
+          test -s ~/.local/share/godot/export_templates/4.3.stable/android_release.apk
           test -d "$ANDROID_SDK_ROOT/platforms/android-34"
           test -x "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt"
           test -x "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt2"
@@ -92,18 +101,17 @@ jobs:
           test -d "$ANDROID_SDK_ROOT/ndk/23.2.8568313"
           test -d "$ANDROID_SDK_ROOT/cmake/3.10.2.4988404"
           echo "Godot 4.3 Android export configuration validated."
-          echo "ETC2/ASTC import enabled."
-          echo "Android SDK, Java SDK, debug keystore, NDK and CMake validated."
 
       - name: Build debug APK
         run: |
           mkdir -p build
-          echo "Using Android SDK: $ANDROID_SDK_ROOT"
-          echo "Using Java SDK: $JAVA_HOME"
           echo "Godot: $(godot --version)"
+          echo "Android SDK: $ANDROID_SDK_ROOT"
+          echo "Java SDK: $JAVA_HOME"
+          echo "Export templates:"
+          ls -lh ~/.local/share/godot/export_templates/4.3.stable/android_*.apk
           "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" version
           "$ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner" --version
-          echo "ETC2/ASTC: $(grep 'textures/vram_compression/import_etc2_astc=true' project.godot)"
           godot --headless --verbose --path . --export-debug "Android" build/Operasyon-Turkiye-debug.apk
 
       - name: Verify APK
