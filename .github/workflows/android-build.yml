@@ -26,13 +26,15 @@ jobs:
       - name: Import project
         run: godot --headless --editor --quit --path .
 
-      - name: Install Android Gradle build template
-        run: godot --headless --editor --quit --path . --install-android-build-template
-
       - name: Build debug APK
         run: |
           mkdir -p build
-          godot --headless --verbose --path . --export-debug "Android" build/Operasyon-Turkiye-debug.apk
+          godot --headless --verbose --path . --install-android-build-template --export-debug "Android" build/Operasyon-Turkiye-debug.apk
+
+      - name: Verify Android Gradle template
+        run: |
+          test -d android/build
+          test -f android/build/build.gradle
 
       - name: Verify APK
         run: test -s build/Operasyon-Turkiye-debug.apk
