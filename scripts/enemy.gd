@@ -31,11 +31,16 @@ var defense_target := Vector3.ZERO
 var defense_active := false
 var objective_attack_timer := 0.0
 var role := "ASSAULT"
-var cover_position := Vector3.ZERO
 var flank_position := Vector3.ZERO
 var tactical_timer := 0.0
 var soldier_visual: Node3D
 var weapon_mesh: MeshInstance3D
+var left_arm: MeshInstance3D
+var right_arm: MeshInstance3D
+var left_leg: MeshInstance3D
+var right_leg: MeshInstance3D
+var head_mesh: MeshInstance3D
+var helmet_mesh: MeshInstance3D
 
 func configure_country(country_name: String) -> void:
     country = country_name
@@ -85,10 +90,10 @@ func _ready() -> void:
 func _create_soldier_model() -> void:
     soldier_visual = Node3D.new()
     soldier_visual.name = "SoldierModel"
-    soldier_visual.position.y = 0.0
     add_child(soldier_visual)
 
     body_mesh = MeshInstance3D.new()
+    body_mesh.name = "Torso"
     var torso := BoxMesh.new()
     torso.size = Vector3(0.72, 0.82, 0.42)
     body_mesh.mesh = torso
@@ -96,41 +101,45 @@ func _create_soldier_model() -> void:
     soldier_visual.add_child(body_mesh)
 
     var vest := MeshInstance3D.new()
+    vest.name = "Vest"
     var vest_mesh := BoxMesh.new()
     vest_mesh.size = Vector3(0.78, 0.55, 0.47)
     vest.mesh = vest_mesh
     vest.position = Vector3(0, 1.18, -0.015)
     soldier_visual.add_child(vest)
 
-    var head := MeshInstance3D.new()
-    var head_mesh := SphereMesh.new()
-    head_mesh.radius = 0.22
-    head_mesh.height = 0.44
-    head.mesh = head_mesh
-    head.position = Vector3(0, 1.72, 0)
+    head_mesh = MeshInstance3D.new()
+    head_mesh.name = "Head"
+    var head := SphereMesh.new()
+    head.radius = 0.22
+    head.height = 0.44
+    head_mesh.mesh = head
+    head_mesh.position = Vector3(0, 1.72, 0)
     var skin := StandardMaterial3D.new()
     skin.albedo_color = Color("#b78362")
     skin.roughness = 0.9
-    head.material_override = skin
-    soldier_visual.add_child(head)
+    head_mesh.material_override = skin
+    soldier_visual.add_child(head_mesh)
 
-    var helmet := MeshInstance3D.new()
-    var helmet_mesh := SphereMesh.new()
-    helmet_mesh.radius = 0.27
-    helmet_mesh.height = 0.22
-    helmet.mesh = helmet_mesh
-    helmet.position = Vector3(0, 1.91, 0)
-    soldier_visual.add_child(helmet)
+    helmet_mesh = MeshInstance3D.new()
+    helmet_mesh.name = "Helmet"
+    var helmet := SphereMesh.new()
+    helmet.radius = 0.27
+    helmet.height = 0.22
+    helmet_mesh.mesh = helmet
+    helmet_mesh.position = Vector3(0, 1.91, 0)
+    soldier_visual.add_child(helmet_mesh)
 
     var limb_material := StandardMaterial3D.new()
     limb_material.albedo_color = Color("#3e493b")
     limb_material.roughness = 0.9
-    _add_limb(Vector3(-0.48, 1.12, 0), Vector3(0.18, 0.72, 0.18), limb_material, "LeftArm")
-    _add_limb(Vector3(0.48, 1.12, 0), Vector3(0.18, 0.72, 0.18), limb_material, "RightArm")
-    _add_limb(Vector3(-0.2, 0.48, 0), Vector3(0.22, 0.75, 0.22), limb_material, "LeftLeg")
-    _add_limb(Vector3(0.2, 0.48, 0), Vector3(0.22, 0.75, 0.22), limb_material, "RightLeg")
+    left_arm = _add_limb(Vector3(-0.48, 1.12, 0), Vector3(0.18, 0.72, 0.18), limb_material, "LeftArm")
+    right_arm = _add_limb(Vector3(0.48, 1.12, 0), Vector3(0.18, 0.72, 0.18), limb_material, "RightArm")
+    left_leg = _add_limb(Vector3(-0.2, 0.48, 0), Vector3(0.22, 0.75, 0.22), limb_material, "LeftLeg")
+    right_leg = _add_limb(Vector3(0.2, 0.48, 0), Vector3(0.22, 0.75, 0.22), limb_material, "RightLeg")
 
     weapon_mesh = MeshInstance3D.new()
+    weapon_mesh.name = "Rifle"
     var rifle := BoxMesh.new()
     rifle.size = Vector3(0.12, 0.12, 0.85)
     weapon_mesh.mesh = rifle
@@ -138,12 +147,12 @@ func _create_soldier_model() -> void:
     weapon_mesh.rotation_degrees = Vector3(-8, 0, 8)
     var weapon_material := StandardMaterial3D.new()
     weapon_material.albedo_color = Color("#202428")
+    weapon_material.roughness = 0.8
     weapon_mesh.material_override = weapon_material
     soldier_visual.add_child(weapon_mesh)
-
     _apply_country_look()
 
-func _add_limb(pos: Vector3, size: Vector3, material: Material, limb_name: String) -> void:
+func _add_limb(pos: Vector3, size: Vector3, material: Material, limb_name: String) -> MeshInstance3D:
     var limb := MeshInstance3D.new()
     limb.name = limb_name
     var mesh := BoxMesh.new()
@@ -152,6 +161,7 @@ func _add_limb(pos: Vector3, size: Vector3, material: Material, limb_name: Strin
     limb.position = pos
     limb.material_override = material
     soldier_visual.add_child(limb)
+    return limb
 
 func _apply_country_look() -> void:
     var profile := CountryProfile.get_profile(country)
@@ -159,11 +169,16 @@ func _apply_country_look() -> void:
     material.albedo_color = _country_color(str(profile.get("uniform", "generic_modern")))
     material.roughness = 0.78
     body_mesh.material_override = material
-    for child in soldier_visual.get_children():
-        if child is MeshInstance3D and child != weapon_mesh and child.name not in ["SoldierModel"]:
-            if child.name in ["Head"]: continue
-            if child.name.begins_with("Left") or child.name.begins_with("Right") or child.name == "Vest":
-                child.material_override = material
+    var vest := soldier_visual.get_node_or_null("Vest") as MeshInstance3D
+    if vest != null: vest.material_override = material
+    var limbs := [left_arm, right_arm, left_leg, right_leg]
+    for limb in limbs:
+        if is_instance_valid(limb): limb.material_override = material
+    if is_instance_valid(helmet_mesh):
+        var helmet_material := StandardMaterial3D.new()
+        helmet_material.albedo_color = material.albedo_color.darkened(0.18)
+        helmet_material.roughness = 0.82
+        helmet_mesh.material_override = helmet_material
     callout_text = CountryProfile.get_callout(country, "contact")
 
 func _country_color(uniform_id: String) -> Color:
@@ -206,6 +221,7 @@ func _physics_process(delta: float) -> void:
         last_seen_position = target.global_position; lost_target_timer = 0.0
     else: lost_target_timer += delta
 
+    _animate_soldier(delta)
     var mission := _get_defense_context()
     var defending: bool = mission != null and mission.get("objective_type") == "DEFEND" and mission.get("active")
     if defending:
@@ -232,6 +248,21 @@ func _physics_process(delta: float) -> void:
         "FLANK": _flank()
         "PRESSURE_OBJECTIVE": _pressure_objective(delta)
         "RETREAT": _retreat()
+
+func _animate_soldier(delta: float) -> void:
+    if not is_instance_valid(soldier_visual): return
+    var moving := Vector2(velocity.x, velocity.z).length() > 0.25
+    var stride := sin(combat_phase * 8.0) * (0.16 if moving else 0.025)
+    if is_instance_valid(left_leg): left_leg.rotation.x = stride
+    if is_instance_valid(right_leg): right_leg.rotation.x = -stride
+    if is_instance_valid(left_arm): left_arm.rotation.x = -stride * 0.8
+    if is_instance_valid(right_arm): right_arm.rotation.x = stride * 0.8
+    var target_lean := -0.035 if moving else 0.0
+    soldier_visual.rotation.z = lerpf(soldier_visual.rotation.z, target_lean, minf(1.0, delta * 8.0))
+    if state == "ATTACK" or state == "FLANK":
+        weapon_mesh.rotation_degrees = Vector3(-10, 0, 6)
+    else:
+        weapon_mesh.rotation_degrees = Vector3(-4, 0, 10)
 
 func _has_line_of_sight() -> bool:
     var space := get_world_3d().direct_space_state
