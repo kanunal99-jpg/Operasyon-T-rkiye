@@ -43,14 +43,14 @@ jobs:
           grep -q 'var map_open: bool' scripts/game_polish_manager.gd
           grep -q '\[node name="GamePolishManager" type="Node" parent="\."\]' main.tscn
           grep -q '\[node name="UpdateManager" type="Node" parent="\."\]' main.tscn
-          echo 'Godot source normalization verified.'
 
       - name: Prepare Android SDK
+        shell: sh
         run: |
+          set -eu
           SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools/bin/sdkmanager"
           test -x "$SDKMANAGER"
           test -d "$JAVA_HOME"
-          java -version
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0" "cmdline-tools;latest" "cmake;3.10.2.4988404" "ndk;23.2.8568313"
           test -x "$ANDROID_SDK_ROOT/platform-tools/adb"
@@ -61,8 +61,10 @@ jobs:
           test -d "$ANDROID_SDK_ROOT/ndk/23.2.8568313"
           test -d "$ANDROID_SDK_ROOT/cmake/3.10.2.4988404"
 
-      - name: Configure Godot 4.3 Android editor settings
+      - name: Configure Godot Android settings
+        shell: sh
         run: |
+          set -eu
           mkdir -p ~/.config/godot
           cat > ~/.config/godot/editor_settings-4.3.tres <<EOF
           [gd_resource type="EditorSettings" format=3]
@@ -79,65 +81,64 @@ jobs:
           EOF
           test -f ~/.config/godot/editor_settings-4.3.tres
           test -f /root/debug.keystore
-          grep -q 'export/android/android_sdk_path = "/usr/lib/android-sdk"' ~/.config/godot/editor_settings-4.3.tres
-          grep -q 'export/android/java_sdk_path = "/usr/lib/jvm/java-17-openjdk-amd64"' ~/.config/godot/editor_settings-4.3.tres
-          grep -q 'export/android/force_system_user = false' ~/.config/godot/editor_settings-4.3.tres
 
-      - name: Build OTA Android plugin
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.2'
 
       - name: Compile OTA plugin AAR
         working-directory: android_ota
+        shell: sh
         run: |
+          set -eu
           gradle --no-daemon --stacktrace :plugin:assemble
           test -s plugin/build/outputs/aar/OperasyonTurkiyeOTA-debug.aar
           test -s plugin/build/outputs/aar/OperasyonTurkiyeOTA-release.aar
           mkdir -p ../addons/OperasyonTurkiyeOTA/bin/debug ../addons/OperasyonTurkiyeOTA/bin/release
           cp plugin/build/outputs/aar/OperasyonTurkiyeOTA-debug.aar ../addons/OperasyonTurkiyeOTA/bin/debug/
           cp plugin/build/outputs/aar/OperasyonTurkiyeOTA-release.aar ../addons/OperasyonTurkiyeOTA/bin/release/
-          test -s ../addons/OperasyonTurkiyeOTA/bin/debug/OperasyonTurkiyeOTA-debug.aar
-          test -s ../addons/OperasyonTurkiyeOTA/bin/release/OperasyonTurkiyeOTA-release.aar
 
       - name: Prepare Godot export templates
+        shell: sh
         run: |
+          set -eu
           mkdir -p ~/.local/share/godot/export_templates/4.3.stable
-          test -f /root/.local/share/godot/export_templates/4.3.stable/android_debug.apk
-          test -f /root/.local/share/godot/export_templates/4.3.stable/android_release.apk
-          test -f /root/.local/share/godot/export_templates/4.3.stable/android_source.zip
+          test -s /root/.local/share/godot/export_templates/4.3.stable/android_debug.apk
+          test -s /root/.local/share/godot/export_templates/4.3.stable/android_release.apk
+          test -s /root/.local/share/godot/export_templates/4.3.stable/android_source.zip
           cp -a /root/.local/share/godot/export_templates/4.3.stable/. ~/.local/share/godot/export_templates/4.3.stable/
-          test -s ~/.local/share/godot/export_templates/4.3.stable/android_debug.apk
-          test -s ~/.local/share/godot/export_templates/4.3.stable/android_release.apk
-          test -s ~/.local/share/godot/export_templates/4.3.stable/android_source.zip
 
       - name: Set release version
+        shell: sh
         run: |
+          set -eu
           VERSION_NAME="0.1.${GITHUB_RUN_NUMBER}"
           sed -i "s/version\/code=[0-9]*/version\/code=${GITHUB_RUN_NUMBER}/" export_presets.cfg
           sed -i "s/version\/name=\"[^\"]*\"/version\/name=\"${VERSION_NAME}\"/" export_presets.cfg
           sed -i "s/const CURRENT_VERSION := \"[^\"]*\"/const CURRENT_VERSION := \"${VERSION_NAME}\"/" scripts/update_manager.gd
-          grep -q "version/code=${GITHUB_RUN_NUMBER}" export_presets.cfg
-          grep -q "version/name=\"${VERSION_NAME}\"" export_presets.cfg
-          grep -q "const CURRENT_VERSION := \"${VERSION_NAME}\"" scripts/update_manager.gd
           echo "VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
-          echo "Release version: ${VERSION_NAME}"
-          echo "Updater version: ${VERSION_NAME}"
 
       - name: Install Godot Android Gradle build template
+        shell: sh
         run: |
+          set -eu
           godot --headless --path . --install-android-build-template
           test -f android/build.gradle
           test -d android/build
           echo "Godot Android Gradle build template installed successfully."
 
       - name: Import project
+        shell: sh
         run: |
+          set -eu
           rm -rf .godot
           godot --headless --editor --path . --import --quit
 
       - name: Validate Android OTA export setup
+        shell: sh
         run: |
+          set -eu
           test -f export_presets.cfg
           grep -q '^platform="Android"' export_presets.cfg
           grep -q 'gradle_build/use_gradle_build=true' export_presets.cfg
@@ -151,31 +152,24 @@ jobs:
           test -s addons/OperasyonTurkiyeOTA/bin/debug/OperasyonTurkiyeOTA-debug.aar
           test -s addons/OperasyonTurkiyeOTA/bin/release/OperasyonTurkiyeOTA-release.aar
           test -f android/build.gradle
-          test -f ~/.config/godot/editor_settings-4.3.tres
           test -f /root/debug.keystore
           test -s ~/.local/share/godot/export_templates/4.3.stable/android_source.zip
-          test -d "$ANDROID_SDK_ROOT/platforms/android-34"
-          test -x "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt"
-          test -x "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt2"
-          test -x "$ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner"
-          echo "Godot 4.3 Android Gradle + OTA plugin configuration validated."
 
       - name: Gameplay smoke test
-        run: |
-          godot --headless --path . --script res://scripts/ci_smoke_test.gd
+        shell: sh
+        run: godot --headless --path . --script res://scripts/ci_smoke_test.gd
 
       - name: Build debug APK
+        shell: sh
         run: |
+          set -eu
           mkdir -p build
-          echo "Godot: $(godot --version)"
-          echo "Android SDK: $ANDROID_SDK_ROOT"
-          echo "Java SDK: $JAVA_HOME"
-          "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" version
-          "$ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner" --version
           godot --headless --verbose --path . --export-debug "Android" build/Operasyon-Turkiye-debug.apk
 
       - name: Verify APK
+        shell: sh
         run: |
+          set -eu
           test -s build/Operasyon-Turkiye-debug.apk
           unzip -t build/Operasyon-Turkiye-debug.apk >/dev/null
           "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt" dump badging build/Operasyon-Turkiye-debug.apk | grep -q 'package:'
