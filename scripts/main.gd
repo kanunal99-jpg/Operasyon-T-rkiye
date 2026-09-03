@@ -54,6 +54,12 @@ func _ready() -> void:
     _on_weapon_changed(player.weapon_name)
     _select_operation(0)
 
+func _process(_delta: float) -> void:
+    if is_instance_valid(mission_manager) and mission_manager.active and mission_manager.objective_type == "REACH":
+        var objective_point := Vector3(0, player.global_position.y, -18)
+        if player.global_position.distance_to(objective_point) <= 3.0:
+            mission_manager.register_reach()
+
 func _build_world() -> void:
     var env := WorldEnvironment.new()
     var environment := Environment.new()
@@ -196,6 +202,7 @@ func _on_objective_changed(title: String,progress: String) -> void:
 func _on_enemy_died() -> void:
     score += 100
     if is_instance_valid(score_label): score_label.text="SKOR %d" % score
+    if is_instance_valid(mission_manager): mission_manager.register_kill()
     if is_instance_valid(game_manager): game_manager.register_enemy_killed()
 
 func _on_wave_changed(wave_number: int, remaining: int) -> void:
@@ -207,8 +214,7 @@ func _on_wave_completed(wave_number: int) -> void:
         call_deferred("_spawn_next_wave")
 
 func _spawn_next_wave() -> void:
-    if not is_instance_valid(game_manager) or not game_manager.active:
-        return
+    if not is_instance_valid(game_manager) or not game_manager.active: return
     _spawn_wave(game_manager.get_next_wave_count())
 
 func _on_game_mission_changed(text: String) -> void:
