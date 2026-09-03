@@ -7,9 +7,13 @@ const WeaponData = preload("res://scripts/weapon_data.gd")
 const Player = preload("res://scripts/player.gd")
 const Enemy = preload("res://scripts/enemy.gd")
 const ContentController = preload("res://scripts/content_controller.gd")
+const UpdateManager = preload("res://scripts/update_manager.gd")
 
 func _init() -> void:
     var failures: Array[String] = []
+
+    if UpdateManager.CURRENT_VERSION != "0.1.5":
+        failures.append("Güncelleme yöneticisi sürümü beklenmeyen değerde")
 
     var operations: Array = OperationData.get_operations("Türkiye")
     if operations.size() < 3:
