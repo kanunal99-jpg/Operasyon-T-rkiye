@@ -7,6 +7,7 @@ class MobileJoystick extends Control:
     signal value_changed(value: Vector2)
     var radius := 68.0
     var knob_radius := 28.0
+    var deadzone := 0.12
     var value := Vector2.ZERO
     var active := false
 
@@ -36,6 +37,11 @@ class MobileJoystick extends Control:
         if offset.length() > radius:
             offset = offset.normalized() * radius
         value = Vector2(offset.x / radius, offset.y / radius)
+        if value.length() < deadzone:
+            value = Vector2.ZERO
+        elif value.length() > 0.0:
+            var strength := (value.length() - deadzone) / (1.0 - deadzone)
+            value = value.normalized() * clampf(strength, 0.0, 1.0)
         value_changed.emit(value)
         queue_redraw()
 
@@ -81,6 +87,7 @@ var mobile_move := Vector2.ZERO
 func _ready() -> void:
     camera = Camera3D.new()
     camera.position = Vector3(0, 0.95, 0)
+    camera.fov = 78.0
     camera.current = true
     add_child(camera)
     _create_weapon_mesh()
@@ -94,8 +101,19 @@ func _ready() -> void:
     camera.add_child(muzzle_flash)
     _create_collision()
     _create_mobile_movement_controls()
+    call_deferred("_hide_legacy_direction_buttons")
     _emit_hud()
     weapon_changed.emit(weapon_name)
+
+func _hide_legacy_direction_buttons() -> void:
+    var root := get_parent()
+    if root == null:
+        return
+    for node in root.find_children("*", "Button", true, false):
+        var button := node as Button
+        if button != null and button.text in ["▲", "▼", "◀", "▶"]:
+            button.visible = false
+            button.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func _create_collision() -> void:
     var shape := CollisionShape3D.new()
