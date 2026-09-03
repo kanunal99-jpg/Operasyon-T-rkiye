@@ -9,11 +9,18 @@ window/size/viewport_height=720
 window/size/window_width_override=1280
 window/size/window_height_override=720
 window/stretch/mode="canvas_items"
+window/handheld/orientation=1
+window/energy_saving/keep_screen_on=true
 
 [rendering]
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+renderer/rendering_method="gl_compatibility"
 textures/default_filters/use_nearest_mipmap_filter=false
+textures/default_filters/use_nearest_mipmap_filter.mobile=false
+
+[physics]
+common/physics_ticks_per_second=60
 
 [input]
 move_forward={"deadzone":0.2,"events":[Object(InputEventKey,"physical_keycode":87)]}
