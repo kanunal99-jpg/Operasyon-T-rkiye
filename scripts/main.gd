@@ -21,6 +21,7 @@ var health_label: Label
 var ammo_label: Label
 var mission_label: Label
 var objective_label: Label
+var weapon_label: Label
 var crosshair: Label
 var map_panel: Panel
 var map_label: Label
@@ -40,7 +41,9 @@ func _ready() -> void:
     mission_manager.objective_changed.connect(_on_objective_changed)
     mission_manager.mission_completed.connect(_on_mission_completed)
     player.hud_changed.connect(_on_player_hud_changed)
+    player.weapon_changed.connect(_on_weapon_changed)
     _on_player_hud_changed(player.health, player.ammo, player.reserve_ammo)
+    _on_weapon_changed(player.weapon_name)
     _select_operation(0)
 
 func _build_world() -> void:
@@ -101,6 +104,7 @@ func _build_hud() -> void:
     mission_label = Label.new(); mission_label.position = Vector2(28,105); hud.add_child(mission_label)
     objective_label = Label.new(); objective_label.position = Vector2(28,135); hud.add_child(objective_label)
     health_label = Label.new(); health_label.position = Vector2(28,165); hud.add_child(health_label)
+    weapon_label = Label.new(); weapon_label.position = Vector2(900,70); hud.add_child(weapon_label)
     ammo_label = Label.new(); ammo_label.position = Vector2(1050,30); hud.add_child(ammo_label)
     crosshair = Label.new(); crosshair.text = "+"; crosshair.position = Vector2(632,330); hud.add_child(crosshair)
     var map_button := Button.new(); map_button.text = "DÜNYA / ÜLKE SEÇ"; map_button.position = Vector2(28,205); map_button.size = Vector2(210,55); map_button.pressed.connect(_toggle_world_map); hud.add_child(map_button)
@@ -113,6 +117,8 @@ func _build_hud() -> void:
     _add_hold_button(hud,"▲",Vector2(125,510),"move_forward"); _add_hold_button(hud,"▼",Vector2(125,600),"move_back"); _add_hold_button(hud,"◀",Vector2(35,555),"move_left"); _add_hold_button(hud,"▶",Vector2(215,555),"move_right")
     var fire := Button.new(); fire.text = "ATEŞ"; fire.position = Vector2(1080,545); fire.size = Vector2(150,100); fire.button_down.connect(func(): player.touch_fire=true); fire.button_up.connect(func(): player.touch_fire=false); hud.add_child(fire)
     var reload := Button.new(); reload.text = "ŞARJÖR"; reload.position = Vector2(930,585); reload.size = Vector2(130,70); reload.pressed.connect(func(): player.reload()); hud.add_child(reload)
+    var weapon_a := Button.new(); weapon_a.text = "1 • TÜFEK"; weapon_a.position = Vector2(760,545); weapon_a.size = Vector2(150,55); weapon_a.pressed.connect(func(): player.equip_weapon("TAARRUZ TÜFEĞİ")); hud.add_child(weapon_a)
+    var weapon_b := Button.new(); weapon_b.text = "2 • MAKİNELİ"; weapon_b.position = Vector2(760,605); weapon_b.size = Vector2(150,55); weapon_b.pressed.connect(func(): player.equip_weapon("HAFİF MAKİNELİ")); hud.add_child(weapon_b)
 
 func _refresh_country_list() -> void:
     if not is_instance_valid(country_list): return
@@ -171,6 +177,9 @@ func _add_hold_button(hud: CanvasLayer,text: String,pos: Vector2,action: String)
 func _on_player_hud_changed(health: int,ammo: int,reserve: int) -> void:
     if is_instance_valid(health_label): health_label.text="CAN %d" % health
     if is_instance_valid(ammo_label): ammo_label.text="%02d / %02d" % [ammo,reserve]
+
+func _on_weapon_changed(name: String) -> void:
+    if is_instance_valid(weapon_label): weapon_label.text = "SİLAH: %s" % name
 
 func _on_objective_changed(title: String,progress: String) -> void:
     if is_instance_valid(objective_label): objective_label.text="%s [%s]" % [title,progress]
