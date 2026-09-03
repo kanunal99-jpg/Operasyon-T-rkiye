@@ -22,8 +22,10 @@ func start_mission(difficulty: int) -> void:
     start_wave(base_enemy_count)
 
 func start_wave(enemy_count: int) -> void:
-    remaining = enemy_count
+    remaining = maxi(0, enemy_count)
     wave_changed.emit(wave, remaining)
+    if remaining == 0 and active:
+        _complete_current_wave()
 
 func register_enemy_killed() -> void:
     if not active:
@@ -32,14 +34,25 @@ func register_enemy_killed() -> void:
     total_kills += 1
     wave_changed.emit(wave, remaining)
     if remaining == 0:
-        wave_completed.emit(wave)
-        if wave >= max_waves:
-            active = false
-            mission_changed.emit("TÜM DALGALAR TAMAMLANDI")
-            all_waves_completed.emit()
-        else:
-            wave += 1
-            mission_changed.emit("DALGA %d HAZIR" % wave)
+        _complete_current_wave()
+
+func _complete_current_wave() -> void:
+    wave_completed.emit(wave)
+    if wave >= max_waves:
+        active = false
+        mission_changed.emit("TÜM DALGALAR TAMAMLANDI")
+        all_waves_completed.emit()
+    else:
+        wave += 1
+        mission_changed.emit("DALGA %d HAZIR" % wave)
 
 func get_next_wave_count() -> int:
     return clampi(base_enemy_count + wave - 1, 4, 10)
+
+func set_wave_enemy_count(enemy_count: int) -> void:
+    if not active:
+        return
+    remaining = maxi(0, enemy_count)
+    wave_changed.emit(wave, remaining)
+    if remaining == 0:
+        _complete_current_wave()
