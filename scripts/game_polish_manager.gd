@@ -43,10 +43,10 @@ func _connect_signals() -> void:
         player.hud_changed.connect(_on_hud_changed)
     if player.has_signal("damage_feedback"):
         player.damage_feedback.connect(_on_damage_feedback)
-    var waves := controller.get("waves")
+    var waves: Node = controller.get("waves")
     if is_instance_valid(waves) and waves.has_signal("wave_changed"):
         waves.wave_changed.connect(_on_wave_changed)
-    var mission := controller.get("mission")
+    var mission: Node = controller.get("mission")
     if is_instance_valid(mission) and mission.has_signal("objective_changed"):
         mission.objective_changed.connect(_on_mission_changed)
 
@@ -125,7 +125,7 @@ func _layout() -> void:
 func _layout_touch_controls(size: Vector2, s: float) -> void:
     if not is_instance_valid(player):
         return
-    var layer := player.get("mobile_controls")
+    var layer: Control = player.get("mobile_controls")
     if not is_instance_valid(layer):
         return
     var joystick = player.get("move_joystick")
@@ -179,7 +179,7 @@ func _process(delta: float) -> void:
 
     var map_menu = controller.get("map_menu") if is_instance_valid(controller) else null
     var gameplay_layer = player.get("mobile_controls") if is_instance_valid(player) else null
-    var map_open := is_instance_valid(map_menu) and map_menu.visible
+    var map_open: bool = is_instance_valid(map_menu) and map_menu.visible
     if is_instance_valid(gameplay_layer):
         gameplay_layer.visible = not map_open
     _layout()
