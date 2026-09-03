@@ -12,16 +12,33 @@ func _ready() -> void:
     _seed_relations()
 
 func _seed_relations() -> void:
-    relations = {
-        "Türkiye": {"Almanya": 25, "Fransa": 20, "Birleşik Krallık": 15, "ABD": 20, "Azerbaycan": 60, "Yunanistan": 5},
-        "Almanya": {"Türkiye": 25, "Fransa": 55, "Birleşik Krallık": 45, "ABD": 50},
-        "Fransa": {"Türkiye": 20, "Almanya": 55, "Birleşik Krallık": 35, "ABD": 55},
-        "ABD": {"Türkiye": 20, "Birleşik Krallık": 65, "Fransa": 55, "Almanya": 50, "Kanada": 70},
-        "Yunanistan": {"Türkiye": 5},
-        "Azerbaycan": {"Türkiye": 60},
-        "Birleşik Krallık": {"ABD": 65, "Fransa": 35, "Almanya": 45},
-        "Kanada": {"ABD": 70}
-    }
+    relations = {}
+    # Baseline diplomatic model: countries start neutral, while selected
+    # relationships provide a more believable campaign opening. All relations
+    # are fictional gameplay values, not statements about real-world policy.
+    for item in GlobalMap.COUNTRIES:
+        var country := str(item[0])
+        relations[country] = {}
+    _set_seed("Türkiye", "Azerbaycan", 60)
+    _set_seed("Türkiye", "Almanya", 25)
+    _set_seed("Türkiye", "Fransa", 20)
+    _set_seed("Türkiye", "Birleşik Krallık", 15)
+    _set_seed("Türkiye", "ABD", 20)
+    _set_seed("Türkiye", "Yunanistan", 5)
+    _set_seed("Almanya", "Fransa", 55)
+    _set_seed("Almanya", "Birleşik Krallık", 45)
+    _set_seed("Almanya", "ABD", 50)
+    _set_seed("Fransa", "Birleşik Krallık", 35)
+    _set_seed("Fransa", "ABD", 55)
+    _set_seed("ABD", "Birleşik Krallık", 65)
+    _set_seed("ABD", "Kanada", 70)
+    _set_seed("Birleşik Krallık", "Kanada", 50)
+
+func _set_seed(country_a: String, country_b: String, value: int) -> void:
+    if not relations.has(country_a): relations[country_a] = {}
+    if not relations.has(country_b): relations[country_b] = {}
+    relations[country_a][country_b] = value
+    relations[country_b][country_a] = value
 
 func get_relation(country_a: String, country_b: String) -> int:
     if relations.has(country_a) and relations[country_a].has(country_b): return int(relations[country_a][country_b])
@@ -63,10 +80,23 @@ func break_alliance(country_a: String, country_b: String) -> void:
 func get_allies(country: String) -> Array:
     return alliances.get(country, []).duplicate()
 
+func get_support_level(country: String) -> int:
+    # Each ally adds tangible campaign support, capped for mobile balance.
+    return mini(3, get_allies(country).size())
+
+func get_enemy_reduction(country: String) -> int:
+    return get_support_level(country)
+
+func get_damage_bonus(country: String) -> float:
+    return 1.0 + (0.05 * get_support_level(country))
+
+func get_intel_bonus(country: String) -> int:
+    return get_support_level(country) * 10
+
 func get_support_summary(country: String) -> String:
     var allies := get_allies(country)
     if allies.is_empty(): return "Müttefik desteği yok"
-    return "Müttefik desteği: %s" % ", ".join(allies)
+    return "Müttefik desteği: %s • DESTEK %d/3" % [", ".join(allies), get_support_level(country)]
 
 func get_diplomacy_state(country: String) -> String:
     var allies := get_allies(country)
@@ -96,6 +126,7 @@ func export_state() -> Dictionary:
     return {"alliances": alliances.duplicate(true), "relations": relations.duplicate(true), "war_alert": war_alert}
 
 func import_state(state: Dictionary) -> void:
+    if state.is_empty(): return
     if state.has("alliances"): alliances = state["alliances"].duplicate(true)
     if state.has("relations"): relations = state["relations"].duplicate(true)
     war_alert = clampi(int(state.get("war_alert", 0)), 0, 100)
