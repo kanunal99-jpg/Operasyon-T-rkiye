@@ -9,6 +9,7 @@ var selected_country := "Türkiye"
 var selected_operation := 0
 var unlocked_countries: Array[String] = ["Türkiye"]
 var completed_operations: Array[String] = []
+var diplomacy_state: Dictionary = {}
 
 func _ready() -> void:
     load_game()
@@ -32,6 +33,10 @@ func unlock_country(country: String) -> void:
         unlocked_countries.append(country)
     save_game()
 
+func set_diplomacy_state(state: Dictionary) -> void:
+    diplomacy_state = state.duplicate(true)
+    save_game()
+
 func save_game() -> void:
     var config := ConfigFile.new()
     config.set_value("player", "score", score)
@@ -40,6 +45,7 @@ func save_game() -> void:
     config.set_value("player", "selected_operation", selected_operation)
     config.set_value("campaign", "unlocked_countries", unlocked_countries)
     config.set_value("campaign", "completed_operations", completed_operations)
+    config.set_value("diplomacy", "state", diplomacy_state)
     config.save(SAVE_PATH)
 
 func load_game() -> void:
@@ -52,3 +58,4 @@ func load_game() -> void:
     selected_operation = int(config.get_value("player", "selected_operation", 0))
     unlocked_countries = config.get_value("campaign", "unlocked_countries", ["Türkiye"])
     completed_operations = config.get_value("campaign", "completed_operations", [])
+    diplomacy_state = config.get_value("diplomacy", "state", {})
