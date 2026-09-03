@@ -59,7 +59,7 @@ jobs:
           test -x "$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt2"
           test -x "$ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner"
           test -d "$ANDROID_SDK_ROOT/ndk/23.2.8568313"
-          test -d "$ANDROID_SDK_ROOT/cmake/3.10.2.4988404
+          test -d "$ANDROID_SDK_ROOT/cmake/3.10.2.4988404"
 
       - name: Configure Godot 4.3 Android editor settings
         run: |
