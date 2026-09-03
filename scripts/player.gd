@@ -91,6 +91,13 @@ var critical_label: Label
 var damage_flash_timer := 0.0
 var critical_pulse := 0.0
 var critical_active := false
+var mobile_controls: CanvasLayer
+var move_joystick: MobileJoystick
+var sprint_button: Button
+var crouch_button: Button
+var jump_button: Button
+var slide_button: Button
+var aim_button: Button
 
 func _ready() -> void:
     camera = Camera3D.new()
@@ -110,9 +117,46 @@ func _ready() -> void:
     _create_collision()
     _create_mobile_movement_controls()
     _create_damage_feedback()
+    _layout_mobile_controls()
     call_deferred("_hide_legacy_direction_buttons")
     _emit_hud()
     weapon_changed.emit(weapon_name)
+
+func _notification(what: int) -> void:
+    if what == NOTIFICATION_RESIZED:
+        call_deferred("_layout_mobile_controls")
+
+func _viewport_size() -> Vector2:
+    return get_viewport().get_visible_rect().size
+
+func _layout_mobile_controls() -> void:
+    if mobile_controls == null:
+        return
+    var size := _viewport_size()
+    if size.x <= 0.0 or size.y <= 0.0:
+        return
+    var scale_factor := clampf(minf(size.x / 1280.0, size.y / 720.0), 0.72, 1.35)
+    var pad := 24.0 * scale_factor
+    var joystick_size := 170.0 * scale_factor
+    var action_w := 88.0 * scale_factor
+    var action_h := 52.0 * scale_factor
+    move_joystick.position = Vector2(pad, size.y - joystick_size - pad)
+    move_joystick.size = Vector2(joystick_size, joystick_size)
+    sprint_button.position = Vector2(pad + joystick_size + 12.0 * scale_factor, size.y - joystick_size - pad + 5.0 * scale_factor)
+    sprint_button.size = Vector2(action_w, action_h)
+    crouch_button.position = Vector2(sprint_button.position.x, sprint_button.position.y + action_h + 8.0 * scale_factor)
+    crouch_button.size = Vector2(action_w, action_h)
+    slide_button.position = Vector2(sprint_button.position.x, crouch_button.position.y + action_h + 8.0 * scale_factor)
+    slide_button.size = Vector2(action_w, 48.0 * scale_factor)
+    jump_button.position = Vector2(sprint_button.position.x + action_w + 12.0 * scale_factor, sprint_button.position.y)
+    jump_button.size = Vector2(action_w, action_h * 2.15)
+    aim_button.position = Vector2(size.x - 150.0 * scale_factor - pad, size.y - 195.0 * scale_factor - pad)
+    aim_button.size = Vector2(150.0 * scale_factor, 70.0 * scale_factor)
+    if damage_overlay != null:
+        damage_overlay.size = size
+    if critical_label != null:
+        critical_label.position = Vector2(size.x * 0.5 - 200.0 * scale_factor, 90.0 * scale_factor)
+        critical_label.size = Vector2(400.0 * scale_factor, 55.0 * scale_factor)
 
 func _create_damage_feedback() -> void:
     var layer := CanvasLayer.new()
@@ -121,7 +165,7 @@ func _create_damage_feedback() -> void:
     add_child(layer)
     damage_overlay = ColorRect.new()
     damage_overlay.position = Vector2.ZERO
-    damage_overlay.size = Vector2(1280, 720)
+    damage_overlay.size = _viewport_size()
     damage_overlay.color = Color(0.75, 0.0, 0.0, 0.0)
     damage_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
     layer.add_child(damage_overlay)
@@ -162,61 +206,49 @@ func _create_weapon_mesh() -> void:
     camera.add_child(weapon)
 
 func _create_mobile_movement_controls() -> void:
-    var controls := CanvasLayer.new()
-    controls.name = "MobileMovementControls"
-    controls.layer = 20
-    add_child(controls)
+    mobile_controls = CanvasLayer.new()
+    mobile_controls.name = "MobileMovementControls"
+    mobile_controls.layer = 20
+    add_child(mobile_controls)
 
-    var joystick := MobileJoystick.new()
-    joystick.name = "MoveJoystick"
-    joystick.position = Vector2(28, 480)
-    joystick.size = Vector2(170, 170)
-    joystick.value_changed.connect(func(value: Vector2): mobile_move = value)
-    controls.add_child(joystick)
+    move_joystick = MobileJoystick.new()
+    move_joystick.name = "MoveJoystick"
+    move_joystick.value_changed.connect(func(value: Vector2): mobile_move = value)
+    mobile_controls.add_child(move_joystick)
 
-    var sprint := Button.new()
-    sprint.text = "KOŞ"
-    sprint.position = Vector2(210, 485)
-    sprint.size = Vector2(88, 52)
-    sprint.button_down.connect(func(): sprint_pressed = true)
-    sprint.button_up.connect(func(): sprint_pressed = false)
-    controls.add_child(sprint)
+    sprint_button = Button.new()
+    sprint_button.text = "KOŞ"
+    sprint_button.button_down.connect(func(): sprint_pressed = true)
+    sprint_button.button_up.connect(func(): sprint_pressed = false)
+    mobile_controls.add_child(sprint_button)
 
-    var crouch := Button.new()
-    crouch.text = "ÇÖMEL"
-    crouch.position = Vector2(210, 545)
-    crouch.size = Vector2(88, 52)
-    crouch.button_down.connect(func(): crouch_pressed = true)
-    crouch.button_up.connect(func(): crouch_pressed = false)
-    controls.add_child(crouch)
+    crouch_button = Button.new()
+    crouch_button.text = "ÇÖMEL"
+    crouch_button.button_down.connect(func(): crouch_pressed = true)
+    crouch_button.button_up.connect(func(): crouch_pressed = false)
+    mobile_controls.add_child(crouch_button)
 
-    var jump := Button.new()
-    jump.text = "ZIPLA"
-    jump.position = Vector2(310, 485)
-    jump.size = Vector2(88, 112)
-    jump.pressed.connect(func(): jump_pressed = true)
-    controls.add_child(jump)
+    jump_button = Button.new()
+    jump_button.text = "ZIPLA"
+    jump_button.pressed.connect(func(): jump_pressed = true)
+    mobile_controls.add_child(jump_button)
 
-    var slide := Button.new()
-    slide.text = "KAY"
-    slide.position = Vector2(210, 605)
-    slide.size = Vector2(88, 48)
-    slide.pressed.connect(func(): slide_pressed = true)
-    controls.add_child(slide)
+    slide_button = Button.new()
+    slide_button.text = "KAY"
+    slide_button.pressed.connect(func(): slide_pressed = true)
+    mobile_controls.add_child(slide_button)
 
-    var aim := Button.new()
-    aim.text = "NİŞAN"
-    aim.position = Vector2(1080, 455)
-    aim.size = Vector2(150, 70)
-    aim.button_down.connect(func(): aim_pressed = true)
-    aim.button_up.connect(func(): aim_pressed = false)
-    controls.add_child(aim)
+    aim_button = Button.new()
+    aim_button.text = "NİŞAN"
+    aim_button.button_down.connect(func(): aim_pressed = true)
+    aim_button.button_up.connect(func(): aim_pressed = false)
+    mobile_controls.add_child(aim_button)
 
 func _unhandled_input(event: InputEvent) -> void:
     if event is InputEventMouseMotion:
         _apply_look(event.relative)
     elif event is InputEventScreenTouch:
-        if event.pressed and event.position.x > 430.0:
+        if event.pressed and event.position.x > _viewport_size().x * 0.34:
             look_touch_id = event.index
             look_last = event.position
         elif not event.pressed and event.index == look_touch_id:
