@@ -2,14 +2,20 @@ extends Node3D
 
 const Player = preload("res://scripts/player.gd")
 const Enemy = preload("res://scripts/enemy.gd")
+const WorldMap = preload("res://scripts/world_map.gd")
 
 var player: CharacterBody3D
 var score := 0
+var mission_id := 1
 var score_label: Label
 var status_label: Label
 var health_label: Label
 var ammo_label: Label
+var mission_label: Label
 var crosshair: Label
+var map_panel: Panel
+var map_label: Label
+var map_open := false
 
 func _ready() -> void:
     _build_world()
@@ -102,8 +108,14 @@ func _build_hud() -> void:
     status_label.text = "OPERASYON BAŞLADI"
     hud.add_child(status_label)
 
+    mission_label = Label.new()
+    mission_label.position = Vector2(28, 115)
+    mission_label.add_theme_font_size_override("font_size", 17)
+    mission_label.text = "GÖREV %d • %s" % [mission_id, WorldMap.get_mission(mission_id).title]
+    hud.add_child(mission_label)
+
     health_label = Label.new()
-    health_label.position = Vector2(28, 88)
+    health_label.position = Vector2(28, 145)
     health_label.add_theme_font_size_override("font_size", 22)
     hud.add_child(health_label)
 
@@ -117,6 +129,25 @@ func _build_hud() -> void:
     crosshair.position = Vector2(632, 330)
     crosshair.add_theme_font_size_override("font_size", 28)
     hud.add_child(crosshair)
+
+    var map_button := Button.new()
+    map_button.text = "DÜNYA HARİTASI"
+    map_button.position = Vector2(28, 190)
+    map_button.size = Vector2(210, 55)
+    map_button.pressed.connect(_toggle_world_map)
+    hud.add_child(map_button)
+
+    map_panel = Panel.new()
+    map_panel.position = Vector2(330, 70)
+    map_panel.size = Vector2(620, 580)
+    map_panel.visible = false
+    hud.add_child(map_panel)
+
+    map_label = Label.new()
+    map_label.position = Vector2(25, 20)
+    map_label.add_theme_font_size_override("font_size", 20)
+    map_label.text = _world_map_text()
+    map_panel.add_child(map_label)
 
     _add_hold_button(hud, "▲", Vector2(125, 510), "move_forward")
     _add_hold_button(hud, "▼", Vector2(125, 600), "move_back")
@@ -145,6 +176,20 @@ func _build_hud() -> void:
     hint.add_theme_font_size_override("font_size", 16)
     hud.add_child(hint)
 
+func _world_map_text() -> String:
+    var text := "OPERASYON TÜRKİYE — DÜNYA HARİTASI\n\n"
+    for mission in WorldMap.MISSIONS:
+        var state := "AKTİF" if mission.id == mission_id else ("AÇIK" if WorldMap.is_unlocked(mission.id) else "KİLİTLİ")
+        text += "%d. %s — %s\n   %s • Zorluk %d • %s\n\n" % [mission.id, mission.region, mission.title, mission.location, mission.difficulty, state]
+    text += "\nHaritadan görev zincirini takip et. Her tamamlanan operasyon yeni bölgenin kilidini açar."
+    return text
+
+func _toggle_world_map() -> void:
+    map_open = not map_open
+    map_panel.visible = map_open
+    if map_open:
+        map_label.text = _world_map_text()
+
 func _add_hold_button(hud: CanvasLayer, text: String, pos: Vector2, action: String) -> void:
     var button := Button.new()
     button.text = text
@@ -166,4 +211,10 @@ func _on_enemy_died() -> void:
     if is_instance_valid(score_label):
         score_label.text = "SKOR %d" % score
     if score >= 500:
-        status_label.text = "GÖREV TAMAMLANDI"
+        WorldMap.complete_mission(mission_id)
+        status_label.text = "GÖREV TAMAMLANDI • YENİ BÖLGE AÇILDI"
+        if mission_id < WorldMap.MISSIONS.size():
+            mission_id += 1
+            mission_label.text = "GÖREV %d • %s" % [mission_id, WorldMap.get_mission(mission_id).title]
+        if map_open:
+            map_label.text = _world_map_text()
