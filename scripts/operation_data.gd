@@ -1,7 +1,10 @@
 extends Node
 
-# Country -> city -> operation data. This is deliberately data-driven so full
-# country/city content can be expanded without rewriting gameplay code.
+# Hand-authored operations are used for the initial campaign countries.
+# Every other country receives deterministic capital-based operations so the
+# global map never opens without playable mission content.
+const GlobalMap = preload("res://scripts/global_world_map.gd")
+
 const OPERATIONS := {
     "Türkiye": [["İstanbul", "Boğaz Hattı", "Şehir içinde keşif ekibini durdur.", 1], ["Ankara", "Başkent Savunması", "Kritik bölgeyi savun.", 2], ["İzmir", "Ege Kıyısı", "İletişim merkezini ele geçir.", 2]],
     "Yunanistan": [["Atina", "Akropolis Hattı", "Kentsel tehdidi etkisizleştir.", 2], ["Selanik", "Kuzey Geçidi", "İkmal hattını güvenceye al.", 2]],
@@ -28,7 +31,17 @@ const OPERATIONS := {
 }
 
 static func get_operations(country: String) -> Array:
-    return OPERATIONS.get(country, [["Merkez", "İlk Temas", "Görev bölgesini güvenceye al.", 2]])
+    if OPERATIONS.has(country):
+        return OPERATIONS[country]
+    for item in GlobalMap.COUNTRIES:
+        if item[0] == country:
+            var capital := str(item[2])
+            var difficulty := int(item[3])
+            return [
+                [capital, "Başkent Operasyonu", "Görev bölgesini güvenceye al.", difficulty],
+                [capital, "Kentsel Hat", "İletişim ve tahliye hattını kontrol et.", difficulty]
+            ]
+    return [["Merkez", "İlk Temas", "Görev bölgesini güvenceye al.", 2]]
 
 static func get_operation(country: String, index: int) -> Array:
     var list := get_operations(country)
