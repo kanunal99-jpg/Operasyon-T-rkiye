@@ -23,6 +23,21 @@ jobs:
           if [ -d /root/.config/godot ]; then cp -a /root/.config/godot/. ~/.config/godot/; fi
           if [ -d /root/.local/share/godot/export_templates/4.3.stable ]; then cp -a /root/.local/share/godot/export_templates/4.3.stable ~/.local/share/godot/export_templates/; fi
 
+      - name: Prepare Android SDK
+        run: |
+          export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/opt/android-sdk}}"
+          export ANDROID_HOME="$ANDROID_SDK_ROOT"
+          if [ ! -x "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
+            echo "Android sdkmanager not found at $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+            find "$ANDROID_SDK_ROOT" -maxdepth 5 -type f -name sdkmanager -print || true
+            exit 1
+          fi
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-33" "build-tools;33.0.2"
+          test -d "$ANDROID_SDK_ROOT/platforms/android-33"
+          test -x "$ANDROID_SDK_ROOT/build-tools/33.0.2/aapt2"
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --list | grep -E 'platforms;android-33|build-tools;33.0.2' | head -20
+
       - name: Import project
         run: godot --headless --editor --quit --path .
 
@@ -32,6 +47,11 @@ jobs:
           test -f export_presets.cfg
           grep -q 'platform="Android"' export_presets.cfg
           grep -q 'gradle_build/use_gradle_build=false' export_presets.cfg
+          ! grep -q 'gradle_build/min_sdk=' export_presets.cfg
+          ! grep -q 'gradle_build/target_sdk=' export_presets.cfg
+          export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/opt/android-sdk}}"
+          test -d "$ANDROID_SDK_ROOT/platforms/android-33"
+          test -x "$ANDROID_SDK_ROOT/build-tools/33.0.2/aapt2"
 
       - name: Build debug APK
         run: |
