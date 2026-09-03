@@ -26,6 +26,9 @@ jobs:
       - name: Import project
         run: godot --headless --editor --quit --path .
 
+      - name: Install Android Gradle build template
+        run: godot --headless --editor --quit --path . --install-android-build-template
+
       - name: Build debug APK
         run: |
           mkdir -p build
