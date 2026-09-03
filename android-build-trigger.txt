@@ -1,0 +1,3 @@
+Android build verification trigger.
+
+Purpose: trigger the existing Android Build workflow after the Android export preset fix.
