@@ -50,12 +50,11 @@ func _ready() -> void:
         GlobalMap.unlock_country(str(saved_country))
     if save_manager.selected_country != "" and GlobalMap.is_unlocked(save_manager.selected_country):
         GlobalMap.select_country(save_manager.selected_country)
-
     alliance_manager = AllianceManager.new()
     add_child(alliance_manager)
+    alliance_manager.import_state(save_manager.diplomacy_state)
     news_cutscene = NewsCutsceneManager.new()
     add_child(news_cutscene)
-
     _build_world()
     _spawn_player()
     _build_hud()
@@ -168,7 +167,8 @@ func _refresh_country_list() -> void:
         var header := Label.new(); header.text = "— %s —" % continent; country_list.add_child(header)
         for item in GlobalMap.countries_by_continent(continent):
             var button := Button.new()
-            button.text = "%s | %s | %s" % [item[0],item[2],"AKTİF" if item[0]==GlobalMap.selected_country else ("AÇIK" if GlobalMap.is_unlocked(item[0]) else "KİLİTLİ")]
+            var diplomacy := alliance_manager.get_diplomacy_state(str(item[0]))
+            button.text = "%s | %s | %s | %s" % [item[0],item[2],"AKTİF" if item[0]==GlobalMap.selected_country else ("AÇIK" if GlobalMap.is_unlocked(item[0]) else "KİLİTLİ"),diplomacy]
             button.disabled = not GlobalMap.is_unlocked(item[0]) and item[0] != "Türkiye"
             button.pressed.connect(func(): _select_country(item[0]))
             country_list.add_child(button)
@@ -183,6 +183,17 @@ func _refresh_operation_list() -> void:
         var done := " ✓" if save_manager != null and save_manager.is_operation_completed(GlobalMap.selected_country, i) else ""
         var button := Button.new(); button.text = "%s • %s • Zorluk %d%s" % [item[0],item[1],item[3],done]; button.pressed.connect(func(): _select_operation(i)); operation_list.add_child(button)
 
+func _build_briefing_cards(country: String, city: String, operation: String) -> Array[Dictionary]:
+    var ally_count := alliance_manager.get_allies(country).size()
+    var state := alliance_manager.get_diplomacy_state(country)
+    var relation_note := "Diplomatik kanallar açık." if state != "GERİLİM" else "Başkentlerde gerilim yükseliyor."
+    return [
+        {"category":"DÜNYA HABERLERİ • SON DAKİKA", "headline":"%s HATTINDA KRİZ ALARMI" % country.to_upper(), "body":"%s çevresinde yeni gelişmeler yaşanıyor. %s Operasyon merkezi birlikleri %s görevi için hazırlıyor." % [city, relation_note, operation], "location":"CANLI YAYIN • %s" % city},
+        {"category":"BAŞKANLIK AÇIKLAMASI", "headline":"KURGUSAL HÜKÜMETTEN ACİL AÇIKLAMA", "body":"Kurgusal devlet başkanı, vatandaşların güvenliği için gerekli tedbirlerin alındığını açıkladı. Kriz yönetim masası gece boyunca açık kalacak.", "location":"BAŞKENT • ULUSAL BASIN MERKEZİ"},
+        {"category":"İTTİFAK MASASI", "headline":"MÜTTEFİKLER HAZIRLIK TOPLANTISINDA", "body":"Mevcut müttefik sayısı: %d. İstihbarat, lojistik ve savunma desteği seçenekleri değerlendiriliyor. Yeni diplomatik teklifler masada." % ally_count, "location":"ORTAK KRİZ MASASI • ALARM %s" % alliance_manager.get_alert_text()},
+        {"category":"GAZETE • ÖZEL BASKI", "headline":"DÜNYA YENİ BİR OPERASYONU BEKLİYOR", "body":"Başkentlerde diplomasi sürerken sahadaki birlikler görev emrini bekliyor. Şimdi karar zamanı: görev başlıyor.", "location":"ULUSLARARASI BASIN • GECE BASKISI"}
+    ]
+
 func _select_operation(index: int) -> void:
     var operations := OperationData.get_operations(GlobalMap.selected_country)
     operation_index = clampi(index, 0, operations.size() - 1)
@@ -190,7 +201,7 @@ func _select_operation(index: int) -> void:
     mission_finished = false
     mission_label.text = "%s • %s" % [op[0],op[1]]
     status_label.text = "GÖREV: %s" % op[2]
-    map_label.text = "%s → %s\n%s\n%s" % [GlobalMap.selected_country,op[0],op[2],alliance_manager.get_support_summary(GlobalMap.selected_country)]
+    map_label.text = "%s → %s\n%s\n%s\nDİPLOMASİ: %s • ALARM: %s" % [GlobalMap.selected_country,op[0],op[2],alliance_manager.get_support_summary(GlobalMap.selected_country),alliance_manager.get_diplomacy_state(GlobalMap.selected_country),alliance_manager.get_alert_text()]
     _rebuild_city()
     if is_instance_valid(save_manager):
         save_manager.selected_country = GlobalMap.selected_country
@@ -200,8 +211,9 @@ func _select_operation(index: int) -> void:
     if is_instance_valid(game_manager):
         game_manager.start_mission(int(op[3]))
         _spawn_wave(game_manager.base_enemy_count)
+    alliance_manager.raise_alert(int(op[3]) * 3)
     if is_instance_valid(news_cutscene):
-        news_cutscene.play_briefing(GlobalMap.selected_country, op[0], op[1], alliance_manager.get_allies(GlobalMap.selected_country).size())
+        news_cutscene.play_briefing(GlobalMap.selected_country, op[0], op[1], alliance_manager.get_allies(GlobalMap.selected_country).size(), _build_briefing_cards(GlobalMap.selected_country, op[0], op[1]))
 
 func _select_country(country: String) -> void:
     if GlobalMap.select_country(country):
@@ -225,7 +237,7 @@ func _get_alliance_candidates() -> Array:
     var candidates: Array = []
     for item in GlobalMap.COUNTRIES:
         var country := str(item[0])
-        if country != GlobalMap.selected_country and alliance_manager.can_form_alliance(GlobalMap.selected_country, country):
+        if country != GlobalMap.selected_country and GlobalMap.is_unlocked(country) and alliance_manager.can_form_alliance(GlobalMap.selected_country, country):
             candidates.append(country)
     return candidates
 
@@ -247,14 +259,19 @@ func _propose_next_alliance() -> void:
         _update_alliance_button()
         return
     var candidate := candidates[alliance_candidate_index]
-    alliance_manager.propose_alliance(GlobalMap.selected_country, candidate)
-    alliance_candidate_index = (alliance_candidate_index + 1) % candidates.size()
+    if alliance_manager.propose_alliance(GlobalMap.selected_country, candidate):
+        save_manager.set_diplomacy_state(alliance_manager.export_state())
+        alliance_candidate_index = 0
+    else:
+        alliance_candidate_index = (alliance_candidate_index + 1) % candidates.size()
     _update_alliance_button()
-    map_label.text = "%s\n%s" % [GlobalMap.selected_country, alliance_manager.get_support_summary(GlobalMap.selected_country)]
+    _refresh_country_list()
+    map_label.text = "%s\n%s\nDİPLOMASİ: %s" % [GlobalMap.selected_country, alliance_manager.get_support_summary(GlobalMap.selected_country), alliance_manager.get_diplomacy_state(GlobalMap.selected_country)]
 
 func _on_diplomacy_changed(message: String) -> void:
     if is_instance_valid(status_label): status_label.text = message
     _update_alliance_button()
+    if is_instance_valid(save_manager): save_manager.set_diplomacy_state(alliance_manager.export_state())
 
 func _toggle_world_map() -> void:
     map_open = not map_open; map_panel.visible = map_open
@@ -309,6 +326,8 @@ func _finish_operation() -> void:
     if is_instance_valid(save_manager):
         save_manager.complete_operation(GlobalMap.selected_country, operation_index, reward)
         score = save_manager.score
+    alliance_manager.lower_alert(10)
+    if is_instance_valid(save_manager): save_manager.set_diplomacy_state(alliance_manager.export_state())
     status_label.text="OPERASYON TAMAMLANDI • +%d XP" % reward
     objective_label.text="HEDEF TAMAMLANDI"
     if GlobalMap.selected_country == "Türkiye" and mission_id <= WorldMap.MISSIONS.size():
@@ -316,9 +335,9 @@ func _finish_operation() -> void:
         if mission_id < WorldMap.MISSIONS.size(): mission_id += 1
     _refresh_country_list()
     _refresh_operation_list()
+    if is_instance_valid(news_cutscene):
+        news_cutscene.play_result(GlobalMap.selected_country, op[0], op[1], score, save_manager.xp, alliance_manager.get_allies(GlobalMap.selected_country).size(), alliance_manager.get_alert_text())
 
 func _on_mission_completed(_reward: int) -> void:
-    # Kill/reach/survive objective completion does not end the operation early;
-    # the wave manager owns final operation completion.
     if is_instance_valid(game_manager) and game_manager.active:
         status_label.text="ANA HEDEF TAMAM • DALGALAR DEVAM EDİYOR"
