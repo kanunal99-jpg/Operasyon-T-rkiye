@@ -82,7 +82,8 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
     if is_instance_valid(mission_manager) and mission_manager.active and mission_manager.objective_type == "REACH":
-        var objective_point := Vector3(0, player.global_position.y, -18)
+        var objective_point := city_arena.get_objective_position() if is_instance_valid(city_arena) else Vector3(0, 1, -18)
+        objective_point.y = player.global_position.y
         if player.global_position.distance_to(objective_point) <= 3.0:
             mission_manager.register_reach()
 
@@ -124,16 +125,33 @@ func _clear_enemies() -> void:
 
 func _spawn_wave(enemy_count: int) -> void:
     _clear_enemies()
-    var positions := [Vector3(-20,1,-20), Vector3(20,1,-20), Vector3(-30,1,15), Vector3(30,1,5), Vector3(0,1,-30), Vector3(-12,1,-34), Vector3(14,1,-34), Vector3(0,1,12), Vector3(25,1,-12), Vector3(-25,1,-12)]
-    for i in range(mini(enemy_count, positions.size())):
+    var positions: Array[Vector3] = city_arena.get_enemy_spawn_positions() if is_instance_valid(city_arena) else [Vector3(-20,1,-20), Vector3(20,1,-20), Vector3(-30,1,15), Vector3(30,1,5), Vector3(0,1,-30), Vector3(-12,1,-34), Vector3(14,1,-34), Vector3(0,1,12), Vector3(25,1,-12), Vector3(-25,1,-12)]
+    if positions.is_empty():
+        positions = [Vector3(-20, 1, -20), Vector3(20, 1, -20)]
+
+    var support_level := alliance_manager.get_support_level(GlobalMap.selected_country)
+    var enemy_reduction := alliance_manager.get_enemy_reduction(GlobalMap.selected_country)
+    var adjusted_count := maxi(2, enemy_count - enemy_reduction)
+    adjusted_count = mini(adjusted_count, positions.size())
+    var damage_bonus := alliance_manager.get_damage_bonus(GlobalMap.selected_country)
+    var intel_bonus := alliance_manager.get_intel_bonus(GlobalMap.selected_country)
+
+    for i in range(adjusted_count):
         var enemy := CharacterBody3D.new()
         enemy.set_script(Enemy)
         enemy.position = positions[i]
         enemy.target = player
         enemy.country = GlobalMap.selected_country
+        enemy.configure_country(GlobalMap.selected_country)
+        enemy.apply_support_bonus(damage_bonus, intel_bonus)
         enemy.died.connect(_on_enemy_died)
         add_child(enemy)
         spawned_enemies.append(enemy)
+
+    if is_instance_valid(game_manager):
+        game_manager.set_wave_enemy_count(spawned_enemies.size())
+    if is_instance_valid(status_label):
+        status_label.text = "DALGA %d • %d DÜŞMAN • DESTEK %d" % [game_manager.wave, spawned_enemies.size(), support_level]
 
 func _build_hud() -> void:
     var hud := CanvasLayer.new(); hud.name = "HUD"; add_child(hud)
