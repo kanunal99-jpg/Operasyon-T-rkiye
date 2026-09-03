@@ -5,10 +5,12 @@ const Enemy = preload("res://scripts/enemy.gd")
 const WorldMap = preload("res://scripts/world_map.gd")
 const GlobalMap = preload("res://scripts/global_world_map.gd")
 const CountryProfile = preload("res://scripts/country_profile.gd")
+const OperationData = preload("res://scripts/operation_data.gd")
 
 var player: CharacterBody3D
 var score := 0
 var mission_id := 1
+var operation_index := 0
 var score_label: Label
 var status_label: Label
 var health_label: Label
@@ -18,6 +20,7 @@ var crosshair: Label
 var map_panel: Panel
 var map_label: Label
 var country_list: VBoxContainer
+var operation_list: VBoxContainer
 var language_button: Button
 var map_open := false
 var selected_voice := "tr"
@@ -29,6 +32,7 @@ func _ready() -> void:
     _build_hud()
     player.hud_changed.connect(_on_player_hud_changed)
     _on_player_hud_changed(player.health, player.ammo, player.reserve_ammo)
+    _refresh_operation_list()
 
 func _build_world() -> void:
     var env := WorldEnvironment.new()
@@ -141,15 +145,19 @@ func _build_hud() -> void:
     map_label.position = Vector2(25, 18)
     map_label.add_theme_font_size_override("font_size", 22)
     map_panel.add_child(map_label)
+    country_list = VBoxContainer.new()
+    country_list.position = Vector2(25, 65)
+    country_list.size = Vector2(720, 260)
+    map_panel.add_child(country_list)
+    operation_list = VBoxContainer.new()
+    operation_list.position = Vector2(25, 330)
+    operation_list.size = Vector2(720, 170)
+    map_panel.add_child(operation_list)
     language_button = Button.new()
     language_button.position = Vector2(25, 555)
     language_button.size = Vector2(350, 48)
     language_button.pressed.connect(_cycle_voice_language)
     map_panel.add_child(language_button)
-    country_list = VBoxContainer.new()
-    country_list.position = Vector2(25, 65)
-    country_list.size = Vector2(720, 475)
-    map_panel.add_child(country_list)
     _refresh_country_list()
     _update_voice_button()
     _add_hold_button(hud, "▲", Vector2(125, 510), "move_forward")
@@ -189,21 +197,49 @@ func _refresh_country_list() -> void:
             var button := Button.new()
             var state := "AKTİF" if item[0] == GlobalMap.selected_country else ("AÇIK" if GlobalMap.is_unlocked(item[0]) else "KİLİTLİ")
             var difficulty := "ZOR" if item[3] == 5 else "NORMAL"
-            button.text = "%s   |   %s   |   %s   | %s" % [item[0], item[2], difficulty, state]
+            button.text = "%s | %s | %s | %s" % [item[0], item[2], difficulty, state]
             button.alignment = HORIZONTAL_ALIGNMENT_LEFT
             button.disabled = not GlobalMap.is_unlocked(item[0]) and item[0] != "Türkiye"
             button.pressed.connect(func(): _select_country(item[0]))
             country_list.add_child(button)
 
+func _refresh_operation_list() -> void:
+    if not is_instance_valid(operation_list):
+        return
+    for child in operation_list.get_children():
+        child.queue_free()
+    var header := Label.new()
+    header.text = "ŞEHİR / OPERASYON"
+    header.add_theme_font_size_override("font_size", 18)
+    operation_list.add_child(header)
+    var operations := OperationData.get_operations(GlobalMap.selected_country)
+    for i in range(operations.size()):
+        var item := operations[i]
+        var button := Button.new()
+        button.text = "%s • %s • Zorluk %d" % [item[0], item[1], item[3]]
+        button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+        button.pressed.connect(func(): _select_operation(i))
+        operation_list.add_child(button)
+
+func _select_operation(index: int) -> void:
+    operation_index = index
+    var operation := OperationData.get_operation(GlobalMap.selected_country, operation_index)
+    mission_label.text = "%s • %s" % [operation[0], operation[1]]
+    status_label.text = "GÖREV: %s" % operation[2]
+    map_label.text = "%s → %s\n%s" % [GlobalMap.selected_country, operation[0], operation[2]]
+
 func _select_country(country: String) -> void:
     if GlobalMap.select_country(country):
+        operation_index = 0
         var profile := CountryProfile.get_profile(country)
         selected_voice = profile.voice
-        mission_label.text = "BÖLGE: %s" % country
+        var operation := OperationData.get_operation(country, 0)
+        mission_label.text = "%s • %s" % [operation[0], operation[1]]
         status_label.text = "%s • %s DİLİ • TÜRKÇE DUBLAJ" % [country.to_upper(), profile.language.to_upper()]
-        map_label.text = "SEÇİLEN BÖLGE: %s\nBaşkent: %s\nÜlke askerî profili ve görev atmosferi hazır." % [country, _get_capital(country)]
+        map_label.text = "SEÇİLEN BÖLGE: %s\nBaşkent: %s\nİlk operasyon: %s" % [country, _get_capital(country), operation[1]]
         _update_voice_button()
         _refresh_country_list()
+        _refresh_operation_list()
 
 func _get_capital(country: String) -> String:
     for item in GlobalMap.COUNTRIES:
@@ -213,10 +249,7 @@ func _get_capital(country: String) -> String:
 
 func _cycle_voice_language() -> void:
     var profile := CountryProfile.get_profile(GlobalMap.selected_country)
-    if selected_voice == "tr":
-        selected_voice = profile.language
-    else:
-        selected_voice = "tr"
+    selected_voice = profile.language if selected_voice == "tr" else "tr"
     _update_voice_button()
     status_label.text = "SES: %s" % ("TÜRKÇE DUBLAJ" if selected_voice == "tr" else "ÜLKE DİLİ")
 
@@ -231,6 +264,7 @@ func _toggle_world_map() -> void:
     map_panel.visible = map_open
     if map_open:
         _refresh_country_list()
+        _refresh_operation_list()
 
 func _add_hold_button(hud: CanvasLayer, text: String, pos: Vector2, action: String) -> void:
     var button := Button.new()
