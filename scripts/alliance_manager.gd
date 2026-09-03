@@ -3,6 +3,7 @@ extends Node
 signal alliance_changed(country: String, partner: String, allied: bool)
 signal diplomacy_changed(message: String)
 
+const GlobalMap = preload("res://scripts/global_world_map.gd")
 var alliances: Dictionary = {}
 var relations: Dictionary = {}
 var war_alert := 0
@@ -23,17 +24,16 @@ func _seed_relations() -> void:
     }
 
 func get_relation(country_a: String, country_b: String) -> int:
-    if relations.has(country_a) and relations[country_a].has(country_b):
-        return int(relations[country_a][country_b])
-    if relations.has(country_b) and relations[country_b].has(country_a):
-        return int(relations[country_b][country_a])
+    if relations.has(country_a) and relations[country_a].has(country_b): return int(relations[country_a][country_b])
+    if relations.has(country_b) and relations[country_b].has(country_a): return int(relations[country_b][country_a])
     return 0
 
 func set_relation(country_a: String, country_b: String, value: int) -> void:
     if not relations.has(country_a): relations[country_a] = {}
-    relations[country_a][country_b] = clampi(value, -100, 100)
     if not relations.has(country_b): relations[country_b] = {}
-    relations[country_b][country_a] = clampi(value, -100, 100)
+    var v := clampi(value, -100, 100)
+    relations[country_a][country_b] = v
+    relations[country_b][country_a] = v
 
 func can_form_alliance(country_a: String, country_b: String) -> bool:
     return country_a != country_b and country_b not in get_allies(country_a) and get_relation(country_a, country_b) >= 25
@@ -43,10 +43,11 @@ func propose_alliance(country_a: String, country_b: String) -> bool:
         diplomacy_changed.emit("İTTİFAK TEKLİFİ REDDEDİLDİ • İLİŞKİ YETERSİZ")
         return false
     if not alliances.has(country_a): alliances[country_a] = []
-    if country_b not in alliances[country_a]: alliances[country_a].append(country_b)
     if not alliances.has(country_b): alliances[country_b] = []
+    if country_b not in alliances[country_a]: alliances[country_a].append(country_b)
     if country_a not in alliances[country_b]: alliances[country_b].append(country_a)
     set_relation(country_a, country_b, get_relation(country_a, country_b) + 10)
+    lower_alert(3)
     alliance_changed.emit(country_a, country_b, true)
     diplomacy_changed.emit("İTTİFAK KURULDU • %s ↔ %s" % [country_a, country_b])
     return true
@@ -55,6 +56,7 @@ func break_alliance(country_a: String, country_b: String) -> void:
     if alliances.has(country_a): alliances[country_a].erase(country_b)
     if alliances.has(country_b): alliances[country_b].erase(country_a)
     set_relation(country_a, country_b, get_relation(country_a, country_b) - 25)
+    raise_alert(15)
     alliance_changed.emit(country_a, country_b, false)
     diplomacy_changed.emit("İTTİFAK SONA ERDİ • %s ↔ %s" % [country_a, country_b])
 
@@ -68,13 +70,11 @@ func get_support_summary(country: String) -> String:
 
 func get_diplomacy_state(country: String) -> String:
     var allies := get_allies(country)
-    if not allies.is_empty():
-        return "İTTİFAKLI • %d ülke" % allies.size()
+    if not allies.is_empty(): return "İTTİFAKLI • %d ülke" % allies.size()
     var best := -101
     for item in GlobalMap.COUNTRIES:
         var other := str(item[0])
-        if other != country:
-            best = maxi(best, get_relation(country, other))
+        if other != country: best = maxi(best, get_relation(country, other))
     if best >= 50: return "DOSTANE"
     if best >= 25: return "MÜZAKERE"
     if best <= 0: return "GERİLİM"
