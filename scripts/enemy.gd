@@ -27,6 +27,9 @@ var damage_multiplier := 1.0
 var last_seen_position := Vector3.ZERO
 var has_line_of_sight := false
 var lost_target_timer := 0.0
+var defense_target := Vector3.ZERO
+var defense_active := false
+var objective_attack_timer := 0.0
 
 func configure_country(country_name: String) -> void:
     country = country_name
@@ -38,6 +41,10 @@ func apply_support_bonus(incoming_damage_multiplier: float = 1.0, incoming_intel
     health = maxi(50, int(round(max_health / damage_multiplier)))
     speed = maxf(1.5, 2.2 - float(intelligence_bonus) * 0.003)
     preferred_range = clampf(7.5 + float(intelligence_bonus) * 0.02, 6.0, 11.0)
+
+func configure_defense_target(position: Vector3) -> void:
+    defense_target = position
+    defense_active = true
 
 func _ready() -> void:
     spawn_position = global_position
@@ -89,6 +96,23 @@ func _country_color(uniform_id: String) -> Color:
     var shade := 0.28 + float(hash_value % 35) / 100.0
     return Color(shade, shade + 0.03, shade - 0.01)
 
+func _get_defense_context() -> Node:
+    var root := get_tree().current_scene
+    if root == null:
+        return null
+    for child in root.get_children():
+        if child != self and child.has_method("damage_defend_objective"):
+            return child
+    return null
+
+func _get_objective_position() -> Vector3:
+    var root := get_tree().current_scene
+    if root != null:
+        for child in root.get_children():
+            if child.has_method("get_objective_position"):
+                return child.get_objective_position()
+    return defense_target
+
 func _physics_process(delta: float) -> void:
     if hit_flash_timer > 0.0:
         hit_flash_timer = maxf(0.0, hit_flash_timer - delta)
@@ -97,6 +121,7 @@ func _physics_process(delta: float) -> void:
     if not is_instance_valid(target): return
 
     attack_timer = maxf(0.0, attack_timer - delta)
+    objective_attack_timer = maxf(0.0, objective_attack_timer - delta)
     combat_phase += delta
     var offset := target.global_position - global_position
     offset.y = 0
@@ -109,7 +134,17 @@ func _physics_process(delta: float) -> void:
     else:
         lost_target_timer += delta
 
-    if distance <= 16.0:
+    var mission := _get_defense_context()
+    var defending := mission != null and mission.get("objective_type") == "DEFEND" and mission.get("active")
+    if defending:
+        defense_active = true
+        defense_target = _get_objective_position()
+
+    var objective_distance := global_position.distance_to(defense_target) if defense_active else 9999.0
+    var player_from_objective := target.global_position.distance_to(defense_target) if defense_active else 9999.0
+    if defending and objective_distance <= 4.0 and player_from_objective > 6.0:
+        state = "PRESSURE_OBJECTIVE"
+    elif distance <= 16.0:
         state = "ATTACK" if distance <= attack_range else "CHASE"
     elif not has_line_of_sight and lost_target_timer < 2.5:
         state = "SEARCH"
@@ -124,6 +159,7 @@ func _physics_process(delta: float) -> void:
         "SEARCH": _search()
         "CHASE": _chase()
         "ATTACK": _combat(delta, distance)
+        "PRESSURE_OBJECTIVE": _pressure_objective(delta)
         "RETREAT": _retreat()
 
 func _has_line_of_sight() -> bool:
@@ -172,6 +208,16 @@ func _combat(delta: float, distance: float) -> void:
             var damage := maxi(3, int(round(8.0 / damage_multiplier)))
             target.take_damage(damage)
             hit_player.emit(damage)
+
+func _pressure_objective(delta: float) -> void:
+    _move_toward(defense_target, speed * 0.9)
+    look_at(Vector3(defense_target.x, global_position.y, defense_target.z), Vector3.UP)
+    var mission := _get_defense_context()
+    if mission == null or not mission.get("active") or mission.get("objective_type") != "DEFEND":
+        return
+    if global_position.distance_to(defense_target) <= 4.2 and objective_attack_timer <= 0.0:
+        objective_attack_timer = 1.15
+        mission.damage_defend_objective(7.0 + float(intelligence_bonus) * 0.03)
 
 func _retreat() -> void:
     var away := global_position - target.global_position
