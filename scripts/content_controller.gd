@@ -44,7 +44,8 @@ func _ready() -> void:
     quality = MobileQuality.new(); add_child(quality)
     save = SaveManager.new(); add_child(save); score = save.score
     global_map = GlobalMap.new(); add_child(global_map)
-    for saved_country in save.unlocked_countries: global_map.unlock_country(str(saved_country))
+    for saved_country in save.unlocked_countries:
+        global_map.unlock_country(str(saved_country))
     selected_country = save.selected_country if save.selected_country != "" else "Türkiye"
     if not global_map.is_unlocked(selected_country): selected_country = "Türkiye"
     global_map.select_country(selected_country)
@@ -63,10 +64,10 @@ func _ready() -> void:
 
 func _build_hud() -> void:
     var hud := CanvasLayer.new(); hud.name = "HUD"; hud.layer = 10; add_child(hud)
-    status = Label.new(); status.name = "Status"; status.position = Vector2(24, 20); status.add_theme_font_size_override("font_size", 20); hud.add_child(status)
-    objective = Label.new(); objective.name = "Objective"; objective.position = Vector2(24, 55); objective.add_theme_font_size_override("font_size", 18); hud.add_child(objective)
-    info = Label.new(); info.name = "Info"; info.position = Vector2(24, 88); info.add_theme_font_size_override("font_size", 16); hud.add_child(info)
-    support_status = Label.new(); support_status.name = "SupportStatus"; support_status.position = Vector2(24, 118); support_status.add_theme_font_size_override("font_size", 15); hud.add_child(support_status)
+    status = Label.new(); status.position = Vector2(24, 20); status.add_theme_font_size_override("font_size", 20); hud.add_child(status)
+    objective = Label.new(); objective.position = Vector2(24, 55); objective.add_theme_font_size_override("font_size", 18); hud.add_child(objective)
+    info = Label.new(); info.position = Vector2(24, 88); info.add_theme_font_size_override("font_size", 16); hud.add_child(info)
+    support_status = Label.new(); support_status.position = Vector2(24, 118); support_status.add_theme_font_size_override("font_size", 15); hud.add_child(support_status)
     support_panel = Control.new(); support_panel.name = "SupportPanel"; support_panel.mouse_filter = Control.MOUSE_FILTER_PASS; hud.add_child(support_panel)
     _add_support_button("Air", "HAVA", _request_air_support)
     _add_support_button("Armor", "ZIRH", _request_armor_support)
@@ -81,9 +82,11 @@ func _layout_hud() -> void:
     var size := get_viewport().get_visible_rect().size
     var s := clampf(minf(size.x / 1280.0, size.y / 720.0), 0.72, 1.35)
     var w := 78.0 * s; var h := 42.0 * s; var gap := 8.0 * s
-    support_panel.position = Vector2(maxf(12.0, size.x - (w * 3.0 + gap * 2.0) - 18.0), 18.0 * s); support_panel.size = Vector2(w * 3.0 + gap * 2.0, h)
+    support_panel.position = Vector2(maxf(12.0, size.x - (w * 3.0 + gap * 2.0) - 18.0), 18.0 * s)
+    support_panel.size = Vector2(w * 3.0 + gap * 2.0, h)
     for i in range(3):
-        var b := support_panel.get_child(i) as Button; b.position = Vector2(i * (w + gap), 0); b.size = Vector2(w, h); b.add_theme_font_size_override("font_size", 14)
+        var b := support_panel.get_child(i) as Button
+        b.position = Vector2(i * (w + gap), 0); b.size = Vector2(w, h); b.add_theme_font_size_override("font_size", 14)
 
 func _show_map_selection() -> void:
     map_menu = CanvasLayer.new(); map_menu.name = "MapSelection"; map_menu.layer = 100; add_child(map_menu); _rebuild_map_menu()
@@ -138,18 +141,35 @@ func _select_map(index: int) -> void:
     _start_operation(operation_index)
 
 func _start_operation(index: int) -> void:
-    operation_index = clampi(index, 0, 2); mission_finished = false; score = save.score
+    operation_index = clampi(index, 0, 2)
+    mission_finished = false
+    score = save.score
     var op: Array = OperationData.get_operation(selected_country, operation_index)
-    city.configure(selected_country, str(op[0]), str(op[1])); city.build(); atmosphere.setup(city.theme, city.seed_value); vehicles.setup(selected_country, CountryProfile.get_profile(selected_country), player); _build_marker()
-    mission.start(op); waves.start_mission(int(op[3])); if mission.objective_type == "DEFEND" or mission.objective_type == "SURVIVE": waves.set_endless_waves(); _spawn_wave(waves.base_enemy_count)
-    status.text = "%s • %s • %s" % [selected_country, str(op[0]), atmosphere.get_status_text()]; support_status.text = vehicles.get_status_text(); news.play_briefing(selected_country, str(op[0]), str(op[1]), diplomacy.get_allies(selected_country).size())
+    city.configure(selected_country, str(op[0]), str(op[1]))
+    city.build()
+    atmosphere.setup(city.theme, city.seed_value)
+    vehicles.setup(selected_country, CountryProfile.get_profile(selected_country), player)
+    _build_marker()
+    mission.start(op)
+    waves.start_mission(int(op[3]))
+    if mission.objective_type == "DEFEND" or mission.objective_type == "SURVIVE":
+        waves.set_endless_waves()
+    _spawn_wave(waves.base_enemy_count)
+    status.text = "%s • %s • %s" % [selected_country, str(op[0]), atmosphere.get_status_text()]
+    support_status.text = vehicles.get_status_text()
+    news.play_briefing(selected_country, str(op[0]), str(op[1]), diplomacy.get_allies(selected_country).size())
 
 func _build_marker() -> void:
     if is_instance_valid(objective_marker): objective_marker.queue_free()
-    objective_marker = MeshInstance3D.new(); objective_marker.name = "ObjectiveMarker"; var mesh := CylinderMesh.new(); mesh.top_radius = 3.5; mesh.bottom_radius = 3.5; mesh.height = 0.08; objective_marker.mesh = mesh; objective_marker.position = city.get_objective_position(); objective_marker.position.y = 0.06; city.add_child(objective_marker)
+    objective_marker = MeshInstance3D.new(); objective_marker.name = "ObjectiveMarker"
+    var mesh := CylinderMesh.new(); mesh.top_radius = 3.5; mesh.bottom_radius = 3.5; mesh.height = 0.08; objective_marker.mesh = mesh
+    objective_marker.position = city.get_objective_position(); objective_marker.position.y = 0.06; city.add_child(objective_marker)
 
 func _spawn_wave(count: int) -> void:
-    _clear_enemies(); var positions: Array[Vector3] = city.get_enemy_spawn_positions(); var support: int = diplomacy.get_enemy_reduction(selected_country); var total: int = mini(positions.size(), mini(quality.get_enemy_budget(), maxi(2, count - support)))
+    _clear_enemies()
+    var positions: Array[Vector3] = city.get_enemy_spawn_positions()
+    var support: int = diplomacy.get_enemy_reduction(selected_country)
+    var total: int = mini(positions.size(), mini(quality.get_enemy_budget(), maxi(2, count - support)))
     for i in range(total):
         var enemy: CharacterBody3D = CharacterBody3D.new(); enemy.set_script(Enemy); enemy.position = positions[i]; enemy.target = player; enemy.configure_country(selected_country)
         if total >= 4 and i % 5 == 0: enemy.configure_role("FLANKER")
@@ -161,7 +181,8 @@ func _spawn_wave(count: int) -> void:
 func _process(_delta: float) -> void:
     if is_instance_valid(support_status) and is_instance_valid(vehicles): support_status.text = vehicles.get_status_text()
     if not is_instance_valid(mission) or not mission.active: return
-    var p: Vector3 = city.get_objective_position(); p.y = player.global_position.y; var d := player.global_position.distance_to(p)
+    var p: Vector3 = city.get_objective_position(); p.y = player.global_position.y
+    var d := player.global_position.distance_to(p)
     if mission.objective_type == "REACH" and d <= 3.0: mission.register_reach()
     elif mission.objective_type == "DEFEND": mission.set_defend_presence(d <= 7.0)
 
@@ -193,7 +214,11 @@ func _on_failed() -> void:
     mission_finished = true; waves.stop_mission(); _clear_enemies(); status.text = "OPERASYON BAŞARISIZ • SAVUNMA BÖLGESİ KAYBEDİLDİ"; objective.text = "GÖREV BAŞARISIZ"
 func _finish_operation() -> void:
     if mission_finished: return
-    mission_finished = true; _clear_enemies(); var op: Array = OperationData.get_operation(selected_country, operation_index); var reward := int(op[3]) * 250; save.complete_operation(selected_country, operation_index, reward); score = save.score; status.text = "OPERASYON TAMAMLANDI • +%d XP" % reward; objective.text = "HEDEF TAMAMLANDI"; news.play_result(selected_country, str(op[0]), str(op[1]), score, save.xp, diplomacy.get_allies(selected_country).size(), diplomacy.get_alert_text())
+    mission_finished = true; _clear_enemies()
+    var op: Array = OperationData.get_operation(selected_country, operation_index); var reward := int(op[3]) * 250
+    save.complete_operation(selected_country, operation_index, reward); score = save.score
+    status.text = "OPERASYON TAMAMLANDI • +%d XP" % reward; objective.text = "HEDEF TAMAMLANDI"
+    news.play_result(selected_country, str(op[0]), str(op[1]), score, save.xp, diplomacy.get_allies(selected_country).size(), diplomacy.get_alert_text())
 func _clear_enemies() -> void:
     for e in enemies:
         if is_instance_valid(e): e.queue_free()
