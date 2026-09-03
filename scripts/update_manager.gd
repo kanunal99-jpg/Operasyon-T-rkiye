@@ -116,7 +116,13 @@ func _on_request_completed(result: int, response_code: int, _headers: PackedStri
         if not FileAccess.file_exists(download_path):
             _schedule_retry("Güncelleme dosyası oluşturulamadı.")
             return
-        var file_size := FileAccess.get_length(download_path)
+        var file := FileAccess.open(download_path, FileAccess.READ)
+        if file == null:
+            _remove_download()
+            _schedule_retry("Güncelleme dosyası okunamadı.")
+            return
+        var file_size: int = file.get_length()
+        file.close()
         if file_size < MIN_APK_SIZE:
             _remove_download()
             _schedule_retry("Güncelleme dosyası geçersiz.")
