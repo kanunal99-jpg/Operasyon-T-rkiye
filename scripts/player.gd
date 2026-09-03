@@ -3,10 +3,8 @@ extends CharacterBody3D
 signal hud_changed(health: int, ammo: int, reserve: int)
 signal weapon_changed(name: String)
 
-const WEAPONS := {
-    "TAARRUZ TÜFEĞİ": {"mag": 30, "damage": 34, "cooldown": 0.12, "reserve": 90},
-    "HAFİF MAKİNELİ": {"mag": 40, "damage": 24, "cooldown": 0.075, "reserve": 120}
-}
+const WeaponData = preload("res://scripts/weapon_data.gd")
+const WEAPONS := WeaponData.WEAPONS
 
 var speed := 6.0
 var gravity := 18.0
@@ -75,6 +73,8 @@ func _unhandled_input(event: InputEvent) -> void:
             equip_weapon("TAARRUZ TÜFEĞİ")
         elif event.keycode == KEY_2:
             equip_weapon("HAFİF MAKİNELİ")
+        elif event.keycode == KEY_3:
+            equip_weapon("KESKİN NİŞANCI")
 
 func _apply_look(delta: Vector2) -> void:
     rotation.y -= delta.x * look_sensitivity
@@ -107,7 +107,8 @@ func shoot() -> void:
     fire_cooldown = float(data["cooldown"])
     muzzle_flash.visible = true
     var from := camera.global_position
-    var to := from + (-camera.global_transform.basis.z * 80.0)
+    var range_value := float(data["range"])
+    var to := from + (-camera.global_transform.basis.z * range_value)
     var query := PhysicsRayQueryParameters3D.create(from, to)
     query.exclude = [self]
     var hit := get_world_3d().direct_space_state.intersect_ray(query)
@@ -120,7 +121,7 @@ func equip_weapon(name: String) -> void:
         return
     weapon_name = name
     var data: Dictionary = WEAPONS[name]
-    ammo = int(data["mag"])
+    ammo = int(data["magazine"])
     reserve_ammo = int(data["reserve"])
     reload_timer = 0.25
     weapon.scale = Vector3(1.0, 1.0, 1.0) if name == "TAARRUZ TÜFEĞİ" else Vector3(0.82, 0.82, 0.72)
@@ -131,7 +132,7 @@ func reload() -> void:
     if reload_timer > 0.0:
         return
     var data: Dictionary = WEAPONS[weapon_name]
-    var mag := int(data["mag"])
+    var mag := int(data["magazine"])
     if ammo >= mag or reserve_ammo <= 0:
         return
     reload_timer = 0.8
@@ -147,7 +148,7 @@ func take_damage(amount: int) -> void:
     if health <= 0:
         health = 100
         var data: Dictionary = WEAPONS[weapon_name]
-        ammo = int(data["mag"])
+        ammo = int(data["magazine"])
         reserve_ammo = int(data["reserve"])
         global_position = Vector3(0, 1.2, 12)
         rotation = Vector3.ZERO
