@@ -71,6 +71,7 @@ var reload_timer := 0.0
 var sprint_pressed := false
 var crouch_pressed := false
 var jump_pressed := false
+var slide_pressed := false
 var slide_timer := 0.0
 var stand_height := 1.8
 var crouch_height := 1.15
@@ -129,26 +130,33 @@ func _create_mobile_movement_controls() -> void:
 
     var sprint := Button.new()
     sprint.text = "KOŞ"
-    sprint.position = Vector2(210, 500)
-    sprint.size = Vector2(88, 55)
+    sprint.position = Vector2(210, 485)
+    sprint.size = Vector2(88, 52)
     sprint.button_down.connect(func(): sprint_pressed = true)
     sprint.button_up.connect(func(): sprint_pressed = false)
     controls.add_child(sprint)
 
     var crouch := Button.new()
     crouch.text = "ÇÖMEL"
-    crouch.position = Vector2(210, 565)
-    crouch.size = Vector2(88, 55)
+    crouch.position = Vector2(210, 545)
+    crouch.size = Vector2(88, 52)
     crouch.button_down.connect(func(): crouch_pressed = true)
     crouch.button_up.connect(func(): crouch_pressed = false)
     controls.add_child(crouch)
 
     var jump := Button.new()
     jump.text = "ZIPLA"
-    jump.position = Vector2(310, 500)
-    jump.size = Vector2(88, 120)
+    jump.position = Vector2(310, 485)
+    jump.size = Vector2(88, 112)
     jump.pressed.connect(func(): jump_pressed = true)
     controls.add_child(jump)
+
+    var slide := Button.new()
+    slide.text = "KAY"
+    slide.position = Vector2(210, 605)
+    slide.size = Vector2(88, 48)
+    slide.pressed.connect(func(): slide_pressed = true)
+    controls.add_child(slide)
 
 func _unhandled_input(event: InputEvent) -> void:
     if event is InputEventMouseMotion:
@@ -186,6 +194,7 @@ func _physics_process(delta: float) -> void:
     var direction := Vector3(input_vec.x, 0, input_vec.y).rotated(Vector3.UP, rotation.y)
     var wants_sprint := sprint_pressed or Input.is_key_pressed(KEY_SHIFT)
     var wants_crouch := crouch_pressed or Input.is_key_pressed(KEY_CTRL)
+    var wants_slide := slide_pressed or (wants_sprint and wants_crouch)
 
     if wants_sprint and input_vec.length() > 0.1 and not wants_crouch and is_on_floor():
         speed = sprint_speed
@@ -194,15 +203,16 @@ func _physics_process(delta: float) -> void:
     else:
         speed = 6.0
 
-    _set_crouched(wants_crouch)
+    _set_crouched(wants_crouch or slide_timer > 0.0)
 
     if jump_pressed or Input.is_action_just_pressed("ui_accept"):
-        if is_on_floor() and not wants_crouch:
+        if is_on_floor() and not wants_crouch and slide_timer <= 0.0:
             velocity.y = jump_velocity
         jump_pressed = false
 
-    if wants_crouch and wants_sprint and input_vec.length() > 0.1 and is_on_floor() and slide_timer <= 0.0:
+    if wants_slide and input_vec.length() > 0.1 and is_on_floor() and slide_timer <= 0.0:
         slide_timer = 0.35
+        slide_pressed = false
         velocity.x = direction.x * 11.0
         velocity.z = direction.z * 11.0
 
