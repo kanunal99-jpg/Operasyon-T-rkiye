@@ -76,7 +76,7 @@ jobs:
       - name: Compile OTA plugin AAR
         working-directory: android_ota
         run: |
-          gradle --no-daemon :plugin:assemble
+          gradle --no-daemon --stacktrace :plugin:assemble
           test -s plugin/build/outputs/aar/OperasyonTurkiyeOTA-debug.aar
           test -s plugin/build/outputs/aar/OperasyonTurkiyeOTA-release.aar
           mkdir -p ../addons/OperasyonTurkiyeOTA/bin/debug ../addons/OperasyonTurkiyeOTA/bin/release
