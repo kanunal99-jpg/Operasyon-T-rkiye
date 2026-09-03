@@ -4,6 +4,7 @@ signal died
 signal hit_player(amount: int)
 
 const CountryProfile = preload("res://scripts/country_profile.gd")
+const RealisticSoldierVisual = preload("res://scripts/realistic_soldier_visual.gd")
 
 var target: Node3D
 var health := 100
@@ -88,87 +89,28 @@ func _ready() -> void:
     add_child(shape)
 
 func _create_soldier_model() -> void:
-    soldier_visual = Node3D.new()
+    # Replace the old block soldier with the new rounded human-proportion visual.
+    soldier_visual = RealisticSoldierVisual.new()
     soldier_visual.name = "SoldierModel"
     add_child(soldier_visual)
-
-    body_mesh = MeshInstance3D.new()
-    body_mesh.name = "Torso"
-    var torso := BoxMesh.new()
-    torso.size = Vector3(0.72, 0.82, 0.42)
-    body_mesh.mesh = torso
-    body_mesh.position = Vector3(0, 1.12, 0)
-    soldier_visual.add_child(body_mesh)
-
-    var vest := MeshInstance3D.new()
-    vest.name = "Vest"
-    var vest_mesh := BoxMesh.new()
-    vest_mesh.size = Vector3(0.78, 0.55, 0.47)
-    vest.mesh = vest_mesh
-    vest.position = Vector3(0, 1.18, -0.015)
-    soldier_visual.add_child(vest)
-
-    head_mesh = MeshInstance3D.new()
-    head_mesh.name = "Head"
-    var head := SphereMesh.new()
-    head.radius = 0.22
-    head.height = 0.44
-    head_mesh.mesh = head
-    head_mesh.position = Vector3(0, 1.72, 0)
-    var skin := StandardMaterial3D.new()
-    skin.albedo_color = Color("#b78362")
-    skin.roughness = 0.9
-    head_mesh.material_override = skin
-    soldier_visual.add_child(head_mesh)
-
-    helmet_mesh = MeshInstance3D.new()
-    helmet_mesh.name = "Helmet"
-    var helmet := SphereMesh.new()
-    helmet.radius = 0.27
-    helmet.height = 0.22
-    helmet_mesh.mesh = helmet
-    helmet_mesh.position = Vector3(0, 1.91, 0)
-    soldier_visual.add_child(helmet_mesh)
-
-    var limb_material := StandardMaterial3D.new()
-    limb_material.albedo_color = Color("#3e493b")
-    limb_material.roughness = 0.9
-    left_arm = _add_limb(Vector3(-0.48, 1.12, 0), Vector3(0.18, 0.72, 0.18), limb_material, "LeftArm")
-    right_arm = _add_limb(Vector3(0.48, 1.12, 0), Vector3(0.18, 0.72, 0.18), limb_material, "RightArm")
-    left_leg = _add_limb(Vector3(-0.2, 0.48, 0), Vector3(0.22, 0.75, 0.22), limb_material, "LeftLeg")
-    right_leg = _add_limb(Vector3(0.2, 0.48, 0), Vector3(0.22, 0.75, 0.22), limb_material, "RightLeg")
-
-    weapon_mesh = MeshInstance3D.new()
-    weapon_mesh.name = "Rifle"
-    var rifle := BoxMesh.new()
-    rifle.size = Vector3(0.12, 0.12, 0.85)
-    weapon_mesh.mesh = rifle
-    weapon_mesh.position = Vector3(0.33, 1.02, -0.42)
-    weapon_mesh.rotation_degrees = Vector3(-8, 0, 8)
-    var weapon_material := StandardMaterial3D.new()
-    weapon_material.albedo_color = Color("#202428")
-    weapon_material.roughness = 0.8
-    weapon_mesh.material_override = weapon_material
-    soldier_visual.add_child(weapon_mesh)
+    # realistic_soldier_visual._ready() populates the compatibility fields on this Enemy.
+    if not is_instance_valid(body_mesh):
+        body_mesh = soldier_visual.get_node_or_null("Torso") as MeshInstance3D
+    if not is_instance_valid(left_arm): left_arm = soldier_visual.get_node_or_null("LeftArm") as MeshInstance3D
+    if not is_instance_valid(right_arm): right_arm = soldier_visual.get_node_or_null("RightArm") as MeshInstance3D
+    if not is_instance_valid(left_leg): left_leg = soldier_visual.get_node_or_null("LeftLeg") as MeshInstance3D
+    if not is_instance_valid(right_leg): right_leg = soldier_visual.get_node_or_null("RightLeg") as MeshInstance3D
+    if not is_instance_valid(head_mesh): head_mesh = soldier_visual.get_node_or_null("Head") as MeshInstance3D
+    if not is_instance_valid(helmet_mesh): helmet_mesh = soldier_visual.get_node_or_null("Helmet") as MeshInstance3D
+    if not is_instance_valid(weapon_mesh): weapon_mesh = soldier_visual.get_node_or_null("Rifle") as MeshInstance3D
     _apply_country_look()
-
-func _add_limb(pos: Vector3, size: Vector3, material: Material, limb_name: String) -> MeshInstance3D:
-    var limb := MeshInstance3D.new()
-    limb.name = limb_name
-    var mesh := BoxMesh.new()
-    mesh.size = size
-    limb.mesh = mesh
-    limb.position = pos
-    limb.material_override = material
-    soldier_visual.add_child(limb)
-    return limb
 
 func _apply_country_look() -> void:
     var profile := CountryProfile.get_profile(country)
     var material := StandardMaterial3D.new()
     material.albedo_color = _country_color(str(profile.get("uniform", "generic_modern")))
     material.roughness = 0.78
-    body_mesh.material_override = material
+    if is_instance_valid(body_mesh): body_mesh.material_override = material
     var vest := soldier_visual.get_node_or_null("Vest") as MeshInstance3D
     if vest != null: vest.material_override = material
     var limbs := [left_arm, right_arm, left_leg, right_leg]
@@ -220,7 +162,6 @@ func _physics_process(delta: float) -> void:
     if has_line_of_sight:
         last_seen_position = target.global_position; lost_target_timer = 0.0
     else: lost_target_timer += delta
-
     _animate_soldier(delta)
     var mission := _get_defense_context()
     var defending: bool = mission != null and mission.get("objective_type") == "DEFEND" and mission.get("active")
@@ -231,15 +172,12 @@ func _physics_process(delta: float) -> void:
     if defending and objective_distance <= 4.0 and player_from_objective > 6.0:
         state = "PRESSURE_OBJECTIVE"
     elif distance <= 16.0:
-        if role == "FLANKER" and distance > 5.0 and has_line_of_sight:
-            state = "FLANK"
+        if role == "FLANKER" and distance > 5.0 and has_line_of_sight: state = "FLANK"
         elif distance <= attack_range: state = "ATTACK"
         else: state = "CHASE"
-    elif not has_line_of_sight and lost_target_timer < 2.5:
-        state = "SEARCH"
+    elif not has_line_of_sight and lost_target_timer < 2.5: state = "SEARCH"
     else: state = "PATROL"
     if health <= max_health * 0.3 and distance < 10.0: state = "RETREAT"
-
     match state:
         "PATROL": _patrol(delta)
         "SEARCH": _search()
@@ -259,10 +197,9 @@ func _animate_soldier(delta: float) -> void:
     if is_instance_valid(right_arm): right_arm.rotation.x = stride * 0.8
     var target_lean := -0.035 if moving else 0.0
     soldier_visual.rotation.z = lerpf(soldier_visual.rotation.z, target_lean, minf(1.0, delta * 8.0))
-    if state == "ATTACK" or state == "FLANK":
-        weapon_mesh.rotation_degrees = Vector3(-10, 0, 6)
-    else:
-        weapon_mesh.rotation_degrees = Vector3(-4, 0, 10)
+    if is_instance_valid(weapon_mesh):
+        if state == "ATTACK" or state == "FLANK": weapon_mesh.rotation_degrees = Vector3(-10, 0, 6)
+        else: weapon_mesh.rotation_degrees = Vector3(-4, 0, 10)
 
 func _has_line_of_sight() -> bool:
     var space := get_world_3d().direct_space_state
@@ -329,6 +266,6 @@ func _move_toward(destination: Vector3, move_speed: float) -> void:
 func take_damage(amount: int) -> void:
     health -= amount
     hit_flash_timer = 0.08
-    body_mesh.modulate = Color(1.0, 0.25, 0.25)
+    if is_instance_valid(body_mesh): body_mesh.modulate = Color(1.0, 0.25, 0.25)
     if health <= 0:
         died.emit(); queue_free()
