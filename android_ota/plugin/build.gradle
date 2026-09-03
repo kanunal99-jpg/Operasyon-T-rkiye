@@ -6,10 +6,14 @@ android {
     namespace 'com.operasyonturkiye.ota'
     compileSdk 34
 
+    buildFeatures {
+        buildConfig true
+    }
+
     defaultConfig {
         minSdk 24
         targetSdk 34
-        buildConfigField 'String', 'GODOT_PLUGIN_NAME', '"OperasyonTurkiyeOTA"'
+        buildConfigField 'String', 'GODOT_PLUGIN_NAME', '\"OperasyonTurkiyeOTA\"'
     }
 
     compileOptions {
