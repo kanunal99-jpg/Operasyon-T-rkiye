@@ -103,7 +103,13 @@ func _add_objective() -> void:
     add_child(marker)
 
 func _add_spawn_markers() -> void:
-    enemy_spawn_positions = [Vector3(-30, 1, -30), Vector3(30, 1, -30), Vector3(-30, 1, 30), Vector3(30, 1, 30)]
+    enemy_spawn_positions = [
+        Vector3(-30, 1, -30), Vector3(30, 1, -30),
+        Vector3(-30, 1, 30), Vector3(30, 1, 30),
+        Vector3(-22, 1, -8), Vector3(22, 1, -8),
+        Vector3(-22, 1, 12), Vector3(22, 1, 12),
+        Vector3(-8, 1, -34), Vector3(8, 1, -34)
+    ]
     for p in enemy_spawn_positions:
         var marker := Marker3D.new()
         marker.position = p
