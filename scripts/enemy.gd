@@ -15,11 +15,16 @@ var body_mesh: MeshInstance3D
 var country := "Türkiye"
 var callout_timer := 0.0
 var callout_text := ""
+var spawn_position := Vector3.ZERO
+var patrol_phase := 0.0
+var state := "PATROL"
 
 func configure_country(country_name: String) -> void:
     country = country_name
 
 func _ready() -> void:
+    spawn_position = global_position
+    patrol_phase = float(get_instance_id() % 100) * 0.1
     body_mesh = MeshInstance3D.new()
     var capsule := CapsuleMesh.new()
     capsule.radius = 0.45
@@ -28,7 +33,6 @@ func _ready() -> void:
     body_mesh.position.y = 0.0
     add_child(body_mesh)
     _apply_country_look()
-
     var shape := CollisionShape3D.new()
     var capsule_shape := CapsuleShape3D.new()
     capsule_shape.radius = 0.45
@@ -72,24 +76,44 @@ func _physics_process(delta: float) -> void:
         callout_timer = maxf(0.0, callout_timer - delta)
     if not is_instance_valid(target):
         return
+
     attack_timer = maxf(0.0, attack_timer - delta)
     var offset := target.global_position - global_position
     offset.y = 0
     var distance := offset.length()
-    if distance > 2.5:
+
+    if distance <= 16.0:
+        state = "ATTACK" if distance <= attack_range else "CHASE"
+    else:
+        state = "PATROL"
+
+    if state == "PATROL":
+        patrol_phase += delta * 0.55
+        var patrol_target := spawn_position + Vector3(cos(patrol_phase) * 3.5, 0, sin(patrol_phase) * 3.5)
+        _move_toward(patrol_target, speed * 0.45)
+    elif state == "CHASE":
+        _move_toward(target.global_position, speed)
+    else:
+        velocity = Vector3.ZERO
+        look_at(Vector3(target.global_position.x, global_position.y, target.global_position.z), Vector3.UP)
+        if attack_timer <= 0.0:
+            attack_timer = 1.0
+            callout_timer = 1.5
+            if target.has_method("take_damage"):
+                target.take_damage(8)
+                hit_player.emit(8)
+
+func _move_toward(destination: Vector3, move_speed: float) -> void:
+    var offset := destination - global_position
+    offset.y = 0
+    if offset.length() > 0.8:
         var direction := offset.normalized()
-        velocity.x = direction.x * speed
-        velocity.z = direction.z * speed
+        velocity.x = direction.x * move_speed
+        velocity.z = direction.z * move_speed
         look_at(global_position + direction, Vector3.UP)
         move_and_slide()
     else:
         velocity = Vector3.ZERO
-    if distance <= attack_range and attack_timer <= 0.0:
-        attack_timer = 1.0
-        callout_timer = 1.5
-        if target.has_method("take_damage"):
-            target.take_damage(8)
-            hit_player.emit(8)
 
 func take_damage(amount: int) -> void:
     health -= amount
