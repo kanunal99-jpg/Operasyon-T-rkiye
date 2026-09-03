@@ -8,10 +8,12 @@ const CountryProfile = preload("res://scripts/country_profile.gd")
 const OperationData = preload("res://scripts/operation_data.gd")
 const CityArena = preload("res://scripts/city_arena.gd")
 const MissionManager = preload("res://scripts/mission_manager.gd")
+const GameManager = preload("res://scripts/game_manager.gd")
 
 var player: CharacterBody3D
 var city_arena: Node3D
 var mission_manager: Node
+var game_manager: Node
 var score := 0
 var mission_id := 1
 var operation_index := 0
@@ -38,8 +40,14 @@ func _ready() -> void:
     _build_hud()
     mission_manager = MissionManager.new()
     add_child(mission_manager)
+    game_manager = GameManager.new()
+    add_child(game_manager)
     mission_manager.objective_changed.connect(_on_objective_changed)
     mission_manager.mission_completed.connect(_on_mission_completed)
+    game_manager.wave_changed.connect(_on_wave_changed)
+    game_manager.wave_completed.connect(_on_wave_completed)
+    game_manager.all_waves_completed.connect(_on_all_waves_completed)
+    game_manager.mission_changed.connect(_on_game_mission_changed)
     player.hud_changed.connect(_on_player_hud_changed)
     player.weapon_changed.connect(_on_weapon_changed)
     _on_player_hud_changed(player.health, player.ammo, player.reserve_ammo)
@@ -82,12 +90,10 @@ func _clear_enemies() -> void:
         if is_instance_valid(enemy): enemy.queue_free()
     spawned_enemies.clear()
 
-func _spawn_enemies() -> void:
+func _spawn_wave(enemy_count: int) -> void:
     _clear_enemies()
-    var op := OperationData.get_operation(GlobalMap.selected_country, operation_index)
-    var count := clampi(int(op[3]) + 3, 4, 8)
-    var positions := [Vector3(-20,1,-20), Vector3(20,1,-20), Vector3(-30,1,15), Vector3(30,1,5), Vector3(0,1,-30), Vector3(-12,1,-34), Vector3(14,1,-34), Vector3(0,1,12)]
-    for i in range(count):
+    var positions := [Vector3(-20,1,-20), Vector3(20,1,-20), Vector3(-30,1,15), Vector3(30,1,5), Vector3(0,1,-30), Vector3(-12,1,-34), Vector3(14,1,-34), Vector3(0,1,12), Vector3(25,1,-12), Vector3(-25,1,-12)]
+    for i in range(mini(enemy_count, positions.size())):
         var enemy := CharacterBody3D.new()
         enemy.set_script(Enemy)
         enemy.position = positions[i]
@@ -147,8 +153,11 @@ func _select_operation(index: int) -> void:
     mission_label.text = "%s • %s" % [op[0],op[1]]
     status_label.text = "GÖREV: %s" % op[2]
     map_label.text = "%s → %s\n%s" % [GlobalMap.selected_country,op[0],op[2]]
-    _rebuild_city(); _spawn_enemies()
+    _rebuild_city()
     if is_instance_valid(mission_manager): mission_manager.start(op)
+    if is_instance_valid(game_manager):
+        game_manager.start_mission(int(op[3]))
+        _spawn_wave(game_manager.base_enemy_count)
 
 func _select_country(country: String) -> void:
     if GlobalMap.select_country(country):
@@ -187,7 +196,29 @@ func _on_objective_changed(title: String,progress: String) -> void:
 func _on_enemy_died() -> void:
     score += 100
     if is_instance_valid(score_label): score_label.text="SKOR %d" % score
-    if is_instance_valid(mission_manager): mission_manager.register_kill()
+    if is_instance_valid(game_manager): game_manager.register_enemy_killed()
+
+func _on_wave_changed(wave_number: int, remaining: int) -> void:
+    status_label.text="DALGA %d • KALAN %d" % [wave_number, remaining]
+
+func _on_wave_completed(wave_number: int) -> void:
+    status_label.text="DALGA %d TAMAMLANDI" % wave_number
+    if is_instance_valid(game_manager) and game_manager.active:
+        call_deferred("_spawn_next_wave")
+
+func _spawn_next_wave() -> void:
+    if not is_instance_valid(game_manager) or not game_manager.active:
+        return
+    _spawn_wave(game_manager.get_next_wave_count())
+
+func _on_game_mission_changed(text: String) -> void:
+    status_label.text=text
+
+func _on_all_waves_completed() -> void:
+    _clear_enemies()
+    if is_instance_valid(mission_manager): mission_manager.active = false
+    status_label.text="OPERASYON TAMAMLANDI • TÜM DALGALAR"
+    objective_label.text="HEDEF TAMAMLANDI"
 
 func _on_mission_completed(reward: int) -> void:
     score += reward
