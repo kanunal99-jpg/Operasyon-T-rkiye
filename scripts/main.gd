@@ -20,6 +20,7 @@ var game_manager: Node
 var save_manager: Node
 var alliance_manager: Node
 var news_cutscene: CanvasLayer
+var objective_marker: MeshInstance3D
 var score := 0
 var mission_id := 1
 var operation_index := 0
@@ -71,21 +72,26 @@ func _ready() -> void:
     player.hud_changed.connect(_on_player_hud_changed)
     player.weapon_changed.connect(_on_weapon_changed)
     alliance_manager.diplomacy_changed.connect(_on_diplomacy_changed)
-    _on_player_hud_changed(player.health, player.ammo, player.reserve_ammo)
-    _on_weapon_changed(player.weapon_name)
     score = save_manager.score
     operation_index = save_manager.selected_operation
+    _on_player_hud_changed(player.health, player.ammo, player.reserve_ammo)
+    _on_weapon_changed(player.weapon_name)
     _refresh_country_list()
     _refresh_operation_list()
     _update_alliance_button()
     _select_operation(operation_index)
 
 func _process(_delta: float) -> void:
-    if is_instance_valid(mission_manager) and mission_manager.active and mission_manager.objective_type == "REACH":
-        var objective_point := city_arena.get_objective_position() if is_instance_valid(city_arena) else Vector3(0, 1, -18)
-        objective_point.y = player.global_position.y
-        if player.global_position.distance_to(objective_point) <= 3.0:
+    if not is_instance_valid(mission_manager) or not mission_manager.active:
+        return
+    var objective_point := city_arena.get_objective_position() if is_instance_valid(city_arena) else Vector3(0, 1, -18)
+    objective_point.y = player.global_position.y
+    var distance := player.global_position.distance_to(objective_point)
+    if mission_manager.objective_type == "REACH":
+        if distance <= 3.0:
             mission_manager.register_reach()
+    elif mission_manager.objective_type == "DEFEND":
+        mission_manager.set_defend_presence(distance <= 7.0)
 
 func _build_world() -> void:
     var env := WorldEnvironment.new()
@@ -107,10 +113,35 @@ func _build_world() -> void:
     _rebuild_city()
 
 func _rebuild_city() -> void:
-    if is_instance_valid(city_arena):
-        var op := OperationData.get_operation(GlobalMap.selected_country, operation_index)
-        city_arena.configure(GlobalMap.selected_country, op[0], op[1])
-        city_arena.build()
+    if not is_instance_valid(city_arena):
+        return
+    var op := OperationData.get_operation(GlobalMap.selected_country, operation_index)
+    city_arena.configure(GlobalMap.selected_country, op[0], op[1])
+    city_arena.build()
+    _build_objective_marker()
+
+func _build_objective_marker() -> void:
+    if is_instance_valid(objective_marker):
+        objective_marker.queue_free()
+        objective_marker = null
+    if not is_instance_valid(city_arena):
+        return
+    objective_marker = MeshInstance3D.new()
+    var cylinder := CylinderMesh.new()
+    cylinder.top_radius = 3.5
+    cylinder.bottom_radius = 3.5
+    cylinder.height = 0.08
+    objective_marker.mesh = cylinder
+    objective_marker.position = city_arena.get_objective_position()
+    objective_marker.position.y = 0.06
+    var material := StandardMaterial3D.new()
+    material.albedo_color = Color("#2ed573")
+    material.emission_enabled = true
+    material.emission = Color("#123f25")
+    material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    material.albedo_color.a = 0.55
+    objective_marker.material_override = material
+    city_arena.add_child(objective_marker)
 
 func _spawn_player() -> void:
     player = CharacterBody3D.new()
@@ -120,41 +151,40 @@ func _spawn_player() -> void:
 
 func _clear_enemies() -> void:
     for enemy in spawned_enemies:
-        if is_instance_valid(enemy): enemy.queue_free()
+        if is_instance_valid(enemy):
+            enemy.queue_free()
     spawned_enemies.clear()
 
 func _spawn_wave(enemy_count: int) -> void:
     _clear_enemies()
-    var positions: Array[Vector3] = city_arena.get_enemy_spawn_positions() if is_instance_valid(city_arena) else [Vector3(-20,1,-20), Vector3(20,1,-20), Vector3(-30,1,15), Vector3(30,1,5), Vector3(0,1,-30), Vector3(-12,1,-34), Vector3(14,1,-34), Vector3(0,1,12), Vector3(25,1,-12), Vector3(-25,1,-12)]
+    var positions: Array[Vector3] = city_arena.get_enemy_spawn_positions() if is_instance_valid(city_arena) else [Vector3(-20,1,-20),Vector3(20,1,-20)]
     if positions.is_empty():
-        positions = [Vector3(-20, 1, -20), Vector3(20, 1, -20)]
-
+        positions = [Vector3(-20,1,-20), Vector3(20,1,-20)]
     var support_level := alliance_manager.get_support_level(GlobalMap.selected_country)
     var enemy_reduction := alliance_manager.get_enemy_reduction(GlobalMap.selected_country)
     var adjusted_count := maxi(2, enemy_count - enemy_reduction)
     adjusted_count = mini(adjusted_count, positions.size())
     var damage_bonus := alliance_manager.get_damage_bonus(GlobalMap.selected_country)
     var intel_bonus := alliance_manager.get_intel_bonus(GlobalMap.selected_country)
-
     for i in range(adjusted_count):
         var enemy := CharacterBody3D.new()
         enemy.set_script(Enemy)
         enemy.position = positions[i]
         enemy.target = player
-        enemy.country = GlobalMap.selected_country
         enemy.configure_country(GlobalMap.selected_country)
         enemy.apply_support_bonus(damage_bonus, intel_bonus)
         enemy.died.connect(_on_enemy_died)
         add_child(enemy)
         spawned_enemies.append(enemy)
-
     if is_instance_valid(game_manager):
         game_manager.set_wave_enemy_count(spawned_enemies.size())
     if is_instance_valid(status_label):
         status_label.text = "DALGA %d • %d DÜŞMAN • DESTEK %d" % [game_manager.wave, spawned_enemies.size(), support_level]
 
 func _build_hud() -> void:
-    var hud := CanvasLayer.new(); hud.name = "HUD"; add_child(hud)
+    var hud := CanvasLayer.new()
+    hud.name = "HUD"
+    add_child(hud)
     score_label = Label.new(); score_label.position = Vector2(28,18); hud.add_child(score_label)
     status_label = Label.new(); status_label.position = Vector2(28,55); hud.add_child(status_label)
     mission_label = Label.new(); mission_label.position = Vector2(28,105); hud.add_child(mission_label)
@@ -185,10 +215,10 @@ func _refresh_country_list() -> void:
         var header := Label.new(); header.text = "— %s —" % continent; country_list.add_child(header)
         for item in GlobalMap.countries_by_continent(continent):
             var button := Button.new()
-            var diplomacy := alliance_manager.get_diplomacy_state(str(item[0]))
-            button.text = "%s | %s | %s | %s" % [item[0],item[2],"AKTİF" if item[0]==GlobalMap.selected_country else ("AÇIK" if GlobalMap.is_unlocked(item[0]) else "KİLİTLİ"),diplomacy]
-            button.disabled = not GlobalMap.is_unlocked(item[0]) and item[0] != "Türkiye"
-            button.pressed.connect(func(): _select_country(item[0]))
+            var country := str(item[0])
+            button.text = "%s | %s | %s | %s" % [country,item[2],"AKTİF" if country==GlobalMap.selected_country else ("AÇIK" if GlobalMap.is_unlocked(country) else "KİLİTLİ"),alliance_manager.get_diplomacy_state(country)]
+            button.disabled = not GlobalMap.is_unlocked(country) and country != "Türkiye"
+            button.pressed.connect(func(): _select_country(country))
             country_list.add_child(button)
 
 func _refresh_operation_list() -> void:
@@ -219,7 +249,6 @@ func _select_operation(index: int) -> void:
     mission_finished = false
     mission_label.text = "%s • %s" % [op[0],op[1]]
     status_label.text = "GÖREV: %s" % op[2]
-    map_label.text = "%s → %s\n%s\n%s\nDİPLOMASİ: %s • ALARM: %s" % [GlobalMap.selected_country,op[0],op[2],alliance_manager.get_support_summary(GlobalMap.selected_country),alliance_manager.get_diplomacy_state(GlobalMap.selected_country),alliance_manager.get_alert_text()]
     _rebuild_city()
     if is_instance_valid(save_manager):
         save_manager.selected_country = GlobalMap.selected_country
@@ -228,10 +257,21 @@ func _select_operation(index: int) -> void:
     if is_instance_valid(mission_manager): mission_manager.start(op)
     if is_instance_valid(game_manager):
         game_manager.start_mission(int(op[3]))
+        if mission_manager.objective_type == "DEFEND" or mission_manager.objective_type == "SURVIVE":
+            game_manager.set_endless_waves()
         _spawn_wave(game_manager.base_enemy_count)
     alliance_manager.raise_alert(int(op[3]) * 3)
+    _update_objective_marker()
     if is_instance_valid(news_cutscene):
         news_cutscene.play_briefing(GlobalMap.selected_country, op[0], op[1], alliance_manager.get_allies(GlobalMap.selected_country).size(), _build_briefing_cards(GlobalMap.selected_country, op[0], op[1]))
+
+func _update_objective_marker() -> void:
+    if not is_instance_valid(objective_marker) or not is_instance_valid(mission_manager): return
+    objective_marker.visible = mission_manager.objective_type == "REACH" or mission_manager.objective_type == "DEFEND"
+    if mission_manager.objective_type == "DEFEND":
+        objective_marker.scale = Vector3(1.8,1.0,1.8)
+    else:
+        objective_marker.scale = Vector3.ONE
 
 func _select_country(country: String) -> void:
     if GlobalMap.select_country(country):
@@ -255,36 +295,27 @@ func _get_alliance_candidates() -> Array:
     var candidates: Array = []
     for item in GlobalMap.COUNTRIES:
         var country := str(item[0])
-        if country != GlobalMap.selected_country and GlobalMap.is_unlocked(country) and alliance_manager.can_form_alliance(GlobalMap.selected_country, country):
-            candidates.append(country)
+        if country != GlobalMap.selected_country and GlobalMap.is_unlocked(country) and alliance_manager.can_form_alliance(GlobalMap.selected_country, country): candidates.append(country)
     return candidates
 
 func _update_alliance_button() -> void:
     if not is_instance_valid(alliance_button): return
     var candidates := _get_alliance_candidates()
     if candidates.is_empty():
-        alliance_button.text = "İTTİFAK: UYGUN TEKLİF YOK"
-        alliance_button.disabled = true
-        return
+        alliance_button.text = "İTTİFAK: UYGUN TEKLİF YOK"; alliance_button.disabled = true; return
     alliance_candidate_index = clampi(alliance_candidate_index, 0, candidates.size() - 1)
-    var candidate := candidates[alliance_candidate_index]
-    alliance_button.text = "İTTİFAK TEKLİFİ: %s" % candidate
+    alliance_button.text = "İTTİFAK TEKLİFİ: %s" % candidates[alliance_candidate_index]
     alliance_button.disabled = false
 
 func _propose_next_alliance() -> void:
     var candidates := _get_alliance_candidates()
-    if candidates.is_empty():
-        _update_alliance_button()
-        return
+    if candidates.is_empty(): _update_alliance_button(); return
     var candidate := candidates[alliance_candidate_index]
     if alliance_manager.propose_alliance(GlobalMap.selected_country, candidate):
-        save_manager.set_diplomacy_state(alliance_manager.export_state())
-        alliance_candidate_index = 0
+        save_manager.set_diplomacy_state(alliance_manager.export_state()); alliance_candidate_index = 0
     else:
         alliance_candidate_index = (alliance_candidate_index + 1) % candidates.size()
-    _update_alliance_button()
-    _refresh_country_list()
-    map_label.text = "%s\n%s\nDİPLOMASİ: %s" % [GlobalMap.selected_country, alliance_manager.get_support_summary(GlobalMap.selected_country), alliance_manager.get_diplomacy_state(GlobalMap.selected_country)]
+    _update_alliance_button(); _refresh_country_list()
 
 func _on_diplomacy_changed(message: String) -> void:
     if is_instance_valid(status_label): status_label.text = message
@@ -308,6 +339,7 @@ func _on_weapon_changed(name: String) -> void:
 
 func _on_objective_changed(title: String,progress: String) -> void:
     if is_instance_valid(objective_label): objective_label.text="%s [%s]" % [title,progress]
+    _update_objective_marker()
 
 func _on_enemy_died() -> void:
     score += 100
@@ -317,28 +349,36 @@ func _on_enemy_died() -> void:
     if is_instance_valid(score_label): score_label.text="SKOR %d" % score
 
 func _on_wave_changed(wave_number: int, remaining: int) -> void:
-    status_label.text="DALGA %d • KALAN %d" % [wave_number, remaining]
+    if is_instance_valid(status_label): status_label.text="DALGA %d • KALAN %d" % [wave_number, remaining]
 
 func _on_wave_completed(wave_number: int) -> void:
-    status_label.text="DALGA %d TAMAMLANDI" % wave_number
+    if is_instance_valid(status_label): status_label.text="DALGA %d TAMAMLANDI" % wave_number
     if is_instance_valid(game_manager) and game_manager.active:
         call_deferred("_spawn_next_wave")
 
 func _spawn_next_wave() -> void:
-    if not is_instance_valid(game_manager) or not game_manager.active: return
+    if not is_instance_valid(game_manager) or not game_manager.active or mission_finished: return
     _spawn_wave(game_manager.get_next_wave_count())
 
 func _on_game_mission_changed(text: String) -> void:
-    status_label.text=text
+    if is_instance_valid(status_label): status_label.text=text
 
 func _on_all_waves_completed() -> void:
+    if is_instance_valid(mission_manager) and mission_manager.active:
+        return
     _clear_enemies()
-    if is_instance_valid(mission_manager): mission_manager.active = false
+    _finish_operation()
+
+func _on_mission_completed(_reward: int) -> void:
+    if mission_finished: return
+    if is_instance_valid(game_manager): game_manager.stop_mission()
+    _clear_enemies()
     _finish_operation()
 
 func _finish_operation() -> void:
     if mission_finished: return
     mission_finished = true
+    if is_instance_valid(mission_manager): mission_manager.active = false
     var op := OperationData.get_operation(GlobalMap.selected_country, operation_index)
     var reward := int(op[3]) * 250
     if is_instance_valid(save_manager):
@@ -351,11 +391,6 @@ func _finish_operation() -> void:
     if GlobalMap.selected_country == "Türkiye" and mission_id <= WorldMap.MISSIONS.size():
         WorldMap.complete_mission(mission_id)
         if mission_id < WorldMap.MISSIONS.size(): mission_id += 1
-    _refresh_country_list()
-    _refresh_operation_list()
+    _refresh_country_list(); _refresh_operation_list()
     if is_instance_valid(news_cutscene):
         news_cutscene.play_result(GlobalMap.selected_country, op[0], op[1], score, save_manager.xp, alliance_manager.get_allies(GlobalMap.selected_country).size(), alliance_manager.get_alert_text())
-
-func _on_mission_completed(_reward: int) -> void:
-    if is_instance_valid(game_manager) and game_manager.active:
-        status_label.text="ANA HEDEF TAMAM • DALGALAR DEVAM EDİYOR"
