@@ -15,6 +15,7 @@ var status_label: Label
 var update_button: Button
 var download_url := ""
 var pending_version := ""
+var expected_sha256 := ""
 var download_path := ""
 var checking := false
 var downloading := false
@@ -117,9 +118,15 @@ func _on_request_completed(result: int, response_code: int, _headers: PackedStri
             return
         var file_size := FileAccess.get_length(download_path)
         if file_size < MIN_APK_SIZE:
-            DirAccess.remove_absolute(ProjectSettings.globalize_path(download_path))
+            _remove_download()
             _schedule_retry("Güncelleme dosyası geçersiz.")
             return
+        if not expected_sha256.is_empty():
+            var actual_sha256 := FileAccess.get_sha256(download_path).to_lower()
+            if actual_sha256.is_empty() or actual_sha256 != expected_sha256:
+                _remove_download()
+                _schedule_retry("Güncelleme doğrulanamadı. Tekrar denenecek.")
+                return
         _install_downloaded_update()
         return
 
@@ -140,12 +147,16 @@ func _on_request_completed(result: int, response_code: int, _headers: PackedStri
 
     var assets: Array = parsed.get("assets", [])
     download_url = ""
+    expected_sha256 = ""
     for asset in assets:
         if typeof(asset) == TYPE_DICTIONARY:
             var name := str(asset.get("name", ""))
             var url := str(asset.get("browser_download_url", ""))
             if name.to_lower().ends_with(".apk") and url.begins_with("https://"):
                 download_url = url
+                var digest := str(asset.get("digest", ""))
+                if digest.begins_with("sha256:"):
+                    expected_sha256 = digest.trim_prefix("sha256:").strip_edges().to_lower()
                 break
 
     if download_url.is_empty():
@@ -170,8 +181,10 @@ func _start_update() -> void:
     DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://updates"))
     download_path = "user://updates/Operasyon-Turkiye-%s.apk" % pending_version
     if FileAccess.file_exists(download_path):
-        _install_downloaded_update()
-        return
+        if _download_matches_expected_hash():
+            _install_downloaded_update()
+            return
+        _remove_download()
 
     downloading = true
     update_button.disabled = true
@@ -220,6 +233,17 @@ func _install_downloaded_update() -> void:
         status_label.text = "Kurulum izni gerekiyor. Android ayarları açılıyor..."
         if ota_plugin.has_method("openInstallPermissionSettings"):
             ota_plugin.openInstallPermissionSettings()
+
+func _download_matches_expected_hash() -> bool:
+    if not FileAccess.file_exists(download_path):
+        return false
+    if expected_sha256.is_empty():
+        return true
+    return FileAccess.get_sha256(download_path).to_lower() == expected_sha256
+
+func _remove_download() -> void:
+    if FileAccess.file_exists(download_path):
+        DirAccess.remove_absolute(ProjectSettings.globalize_path(download_path))
 
 func _schedule_retry(message: String) -> void:
     if status_label != null:
