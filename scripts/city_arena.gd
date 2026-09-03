@@ -11,6 +11,9 @@ var objective_position := Vector3(0, 1, -18)
 var objective_radius := 4.5
 var objective_zone: Area3D
 
+const MOBILE_BUILDING_COUNT := 14
+const DESKTOP_BUILDING_COUNT := 22
+
 func configure(country_name: String, city_name: String, operation_name: String) -> void:
     country = country_name
     city = city_name
@@ -81,7 +84,10 @@ func _add_roads() -> void:
 func _add_buildings() -> void:
     var rng := RandomNumberGenerator.new()
     rng.seed = seed_value
-    var count := 22 if theme == "urban" or theme == "industrial" else 16
+    var desktop := DisplayServer.is_touchscreen_available() == false
+    var count := DESKTOP_BUILDING_COUNT if desktop else MOBILE_BUILDING_COUNT
+    if theme == "desert" or theme == "snow":
+        count = mini(count, 12 if not desktop else 16)
     for i in range(count):
         var side := -1.0 if i % 2 == 0 else 1.0
         var x := side * (13.0 + float((i * 7) % 18))
