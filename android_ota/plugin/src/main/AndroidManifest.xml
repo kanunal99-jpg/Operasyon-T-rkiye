@@ -1,21 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <application>
         <meta-data
             android:name="org.godotengine.plugin.v2.OperasyonTurkiyeOTA"
             android:value="com.operasyonturkiye.ota.GodotAndroidPlugin" />
         <provider
-            android:name="androidx.core.content.FileProvider"
+            android:name="com.operasyonturkiye.ota.OperasyonTurkiyeFileProvider"
             android:authorities="${applicationId}.ota.fileprovider"
             android:exported="false"
-            android:grantUriPermissions="true"
-            tools:replace="android:authorities">
+            android:grantUriPermissions="true">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/ota_file_paths"
-                tools:replace="android:resource" />
+                android:resource="@xml/ota_file_paths" />
         </provider>
     </application>
 </manifest>
