@@ -24,6 +24,61 @@ jobs:
         with:
           lfs: true
 
+      - name: Normalize Godot source before export
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              s = p.read_text(encoding="utf-8")
+              if old not in s:
+                  raise SystemExit(f"Missing expected text in {path}: {old!r}")
+              p.write_text(s.replace(old, new), encoding="utf-8")
+
+          replace(
+              "scripts/content_controller.gd",
+              "var countries := global_map.countries_by_continent(selected_continent)",
+              "var countries: Array = global_map.countries_by_continent(selected_continent)",
+          )
+          replace(
+              "scripts/content_controller.gd",
+              "var unlocked := global_map.is_unlocked(country_name)",
+              "var unlocked: bool = global_map.is_unlocked(country_name)",
+          )
+          replace(
+              "scripts/content_controller.gd",
+              "var completed := save.is_operation_completed(selected_country, i)",
+              "var completed: bool = save.is_operation_completed(selected_country, i)",
+          )
+          replace(
+              "main.tscn",
+              '[node name="GamePolishManager" type="Node"]',
+              '[node name="GamePolishManager" type="Node" parent="."]',
+          )
+          replace(
+              "main.tscn",
+              '[node name="UpdateManager" type="Node"]',
+              '[node name="UpdateManager" type="Node" parent="."]',
+          )
+
+          checks = [
+              ("scripts/content_controller.gd", "var countries: Array"),
+              ("scripts/content_controller.gd", "var unlocked: bool"),
+              ("scripts/content_controller.gd", "var completed: bool"),
+              ("scripts/update_manager.gd", "var file := FileAccess.open(download_path, FileAccess.READ)"),
+              ("scripts/game_polish_manager.gd", "var waves: Node"),
+              ("scripts/game_polish_manager.gd", "var mission: Node"),
+              ("scripts/game_polish_manager.gd", "var layer: Control"),
+              ("scripts/game_polish_manager.gd", "var map_open: bool"),
+              ("main.tscn", '[node name="GamePolishManager" type="Node" parent="."]'),
+              ("main.tscn", '[node name="UpdateManager" type="Node" parent="."]'),
+          ]
+          for path, needle in checks:
+              if needle not in Path(path).read_text(encoding="utf-8"):
+                  raise SystemExit(f"Repair verification failed: {path}: {needle!r}")
+          print("Godot source normalization verified.")
+
       - name: Prepare Android SDK
         run: |
           SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools/bin/sdkmanager"
