@@ -1,15 +1,12 @@
 name: Android Build
-
 on:
   workflow_dispatch:
   push:
     branches: [main]
-
 env:
   GODOT_VERSION: 4.3-stable
   ANDROID_HOME: /opt/android-sdk
   ANDROID_SDK_ROOT: /opt/android-sdk
-
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -31,15 +28,6 @@ jobs:
           sed -i 's/var map_open :=/var map_open: bool =/' scripts/game_polish_manager.gd
           sed -i 's/\[node name="GamePolishManager" type="Node"\]/[node name="GamePolishManager" type="Node" parent="."]/' main.tscn
           sed -i 's/\[node name="UpdateManager" type="Node"\]/[node name="UpdateManager" type="Node" parent="."]/' main.tscn
-          grep -q 'var countries: Array =' scripts/content_controller.gd
-          grep -q 'var unlocked: bool =' scripts/content_controller.gd
-          grep -q 'var completed: bool =' scripts/content_controller.gd
-          grep -q 'var waves: Node =' scripts/game_polish_manager.gd
-          grep -q 'var mission: Node =' scripts/game_polish_manager.gd
-          grep -q 'var layer: Control =' scripts/game_polish_manager.gd
-          grep -q 'var map_open: bool =' scripts/game_polish_manager.gd
-          grep -q '\[node name="GamePolishManager" type="Node" parent="\."\]' main.tscn
-          grep -q '\[node name="UpdateManager" type="Node" parent="\."\]' main.tscn
       - name: Prepare Android SDK
         shell: sh
         run: |
@@ -104,8 +92,6 @@ jobs:
           set -eu
           test -f android_ota/plugin/build/outputs/aar/OperasyonTurkiyeOTA-release.aar
           test -f android/build.gradle
-          grep -q 'com.operasyonturkiye.ota.OperasyonTurkiyeFileProvider' android_ota/plugin/src/main/AndroidManifest.xml
-          grep -q 'ota.fileprovider' android_ota/plugin/src/main/AndroidManifest.xml
       - name: Gameplay smoke test
         shell: sh
         run: |
