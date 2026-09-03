@@ -24,6 +24,7 @@ var diplomacy: Node
 var quality: Node
 var atmosphere: Node
 var vehicles: Node
+var global_map: Node
 var news: CanvasLayer
 var objective_marker: MeshInstance3D
 var enemies: Array[Node] = []
@@ -39,8 +40,12 @@ var support_status: Label
 func _ready() -> void:
     quality = MobileQuality.new(); add_child(quality)
     save = SaveManager.new(); add_child(save)
+    global_map = GlobalMap.new(); global_map.name = "GlobalWorldMap"; add_child(global_map)
     selected_country = save.selected_country if save.selected_country != "" else "Türkiye"
-    if not GlobalMap.is_unlocked(selected_country): selected_country = "Türkiye"
+    for saved_country in save.unlocked_countries:
+        global_map.unlock_country(str(saved_country))
+    if not global_map.is_unlocked(selected_country): selected_country = "Türkiye"
+    global_map.select_country(selected_country)
     diplomacy = AllianceManager.new(); add_child(diplomacy); diplomacy.import_state(save.diplomacy_state)
     news = NewsCutsceneManager.new(); add_child(news)
     atmosphere = EnvironmentManager.new(); add_child(atmosphere)
@@ -78,8 +83,8 @@ func _build_hud() -> void:
 
 func _start_operation(index: int) -> void:
     operation_index = clampi(index, 0, 2); mission_finished = false
-    var op := OperationData.get_operation(selected_country, operation_index)
-    city.configure(selected_country, op[0], op[1]); city.build()
+    var op: Array = OperationData.get_operation(selected_country, operation_index)
+    city.configure(selected_country, str(op[0]), str(op[1])); city.build()
     atmosphere.setup(city.theme, city.seed_value)
     vehicles.setup(selected_country, CountryProfile.get_profile(selected_country), player)
     _build_marker()
@@ -87,9 +92,9 @@ func _start_operation(index: int) -> void:
     waves.start_mission(int(op[3]))
     if mission.objective_type == "DEFEND" or mission.objective_type == "SURVIVE": waves.set_endless_waves()
     _spawn_wave(waves.base_enemy_count)
-    status.text = "%s • %s • %s" % [selected_country, op[0], atmosphere.get_status_text()]
+    status.text = "%s • %s • %s" % [selected_country, str(op[0]), atmosphere.get_status_text()]
     support_status.text = vehicles.get_status_text()
-    news.play_briefing(selected_country, op[0], op[1], diplomacy.get_allies(selected_country).size())
+    news.play_briefing(selected_country, str(op[0]), str(op[1]), diplomacy.get_allies(selected_country).size())
 
 func _build_marker() -> void:
     if is_instance_valid(objective_marker): objective_marker.queue_free()
@@ -101,23 +106,31 @@ func _spawn_wave(count: int) -> void:
     for e in enemies:
         if is_instance_valid(e): e.queue_free()
     enemies.clear()
-    var positions := city.get_enemy_spawn_positions()
-    var support := diplomacy.get_enemy_reduction(selected_country)
-    var total := mini(positions.size(), mini(quality.get_enemy_budget(), maxi(2, count - support)))
+    var positions: Array[Vector3] = city.get_enemy_spawn_positions()
+    var support: int = diplomacy.get_enemy_reduction(selected_country)
+    var total: int = mini(positions.size(), mini(quality.get_enemy_budget(), maxi(2, count - support)))
     for i in range(total):
-        var enemy := CharacterBody3D.new(); enemy.set_script(Enemy); enemy.position = positions[i]; enemy.target = player; enemy.configure_country(selected_country)
+        var enemy: CharacterBody3D = CharacterBody3D.new()
+        enemy.set_script(Enemy)
+        enemy.position = positions[i]
+        enemy.target = player
+        enemy.configure_country(selected_country)
         if total >= 4 and i % 5 == 0: enemy.configure_role("FLANKER")
         elif i % 3 == 0: enemy.configure_role("SUPPORT")
         else: enemy.configure_role("ASSAULT")
-        enemy.apply_support_bonus(diplomacy.get_damage_bonus(selected_country), diplomacy.get_intel_bonus(selected_country)); enemy.died.connect(_on_enemy_died); add_child(enemy); enemies.append(enemy)
+        enemy.apply_support_bonus(diplomacy.get_damage_bonus(selected_country), diplomacy.get_intel_bonus(selected_country))
+        enemy.died.connect(_on_enemy_died)
+        add_child(enemy)
+        enemies.append(enemy)
     waves.set_wave_enemy_count(enemies.size())
     status.text = "DALGA %d • %d DÜŞMAN • DESTEK %d • %s" % [waves.wave, enemies.size(), diplomacy.get_support_level(selected_country), atmosphere.get_status_text()]
 
 func _process(_delta: float) -> void:
     if is_instance_valid(support_status) and is_instance_valid(vehicles): support_status.text = vehicles.get_status_text()
     if not is_instance_valid(mission) or not mission.active: return
-    var p := city.get_objective_position(); p.y = player.global_position.y
-    var d := player.global_position.distance_to(p)
+    var p: Vector3 = city.get_objective_position()
+    p.y = player.global_position.y
+    var d: float = player.global_position.distance_to(p)
     if mission.objective_type == "REACH" and d <= 3.0: mission.register_reach()
     elif mission.objective_type == "DEFEND": mission.set_defend_presence(d <= 7.0)
 
@@ -164,10 +177,11 @@ func _on_failed() -> void:
 func _finish_operation() -> void:
     if mission_finished: return
     mission_finished = true; _clear_enemies()
-    var op := OperationData.get_operation(selected_country, operation_index); var reward := int(op[3]) * 250
+    var op: Array = OperationData.get_operation(selected_country, operation_index)
+    var reward: int = int(op[3]) * 250
     save.complete_operation(selected_country, operation_index, reward); score = save.score
     status.text = "OPERASYON TAMAMLANDI • +%d XP" % reward; objective.text = "HEDEF TAMAMLANDI"
-    news.play_result(selected_country, op[0], op[1], score, save.xp, diplomacy.get_allies(selected_country).size(), diplomacy.get_alert_text())
+    news.play_result(selected_country, str(op[0]), str(op[1]), score, save.xp, diplomacy.get_allies(selected_country).size(), diplomacy.get_alert_text())
 
 func _clear_enemies() -> void:
     for e in enemies:
