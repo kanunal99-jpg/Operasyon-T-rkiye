@@ -7,12 +7,17 @@ var player: CharacterBody3D
 var score := 0
 var score_label: Label
 var status_label: Label
+var health_label: Label
+var ammo_label: Label
+var crosshair: Label
 
 func _ready() -> void:
     _build_world()
     _spawn_player()
     _spawn_enemies()
     _build_hud()
+    player.hud_changed.connect(_on_player_hud_changed)
+    _on_player_hud_changed(player.health, player.ammo, player.reserve_ammo)
 
 func _build_world() -> void:
     var env := WorldEnvironment.new()
@@ -86,25 +91,41 @@ func _build_hud() -> void:
     add_child(hud)
 
     score_label = Label.new()
-    score_label.position = Vector2(28, 24)
+    score_label.position = Vector2(28, 18)
     score_label.add_theme_font_size_override("font_size", 28)
     score_label.text = "SKOR 0"
     hud.add_child(score_label)
 
     status_label = Label.new()
-    status_label.position = Vector2(28, 62)
-    status_label.add_theme_font_size_override("font_size", 20)
+    status_label.position = Vector2(28, 55)
+    status_label.add_theme_font_size_override("font_size", 18)
     status_label.text = "OPERASYON BAŞLADI"
     hud.add_child(status_label)
 
-    _add_hold_button(hud, "▲", Vector2(125, 535), "move_forward")
-    _add_hold_button(hud, "▼", Vector2(125, 625), "move_back")
-    _add_hold_button(hud, "◀", Vector2(35, 580), "move_left")
-    _add_hold_button(hud, "▶", Vector2(215, 580), "move_right")
+    health_label = Label.new()
+    health_label.position = Vector2(28, 88)
+    health_label.add_theme_font_size_override("font_size", 22)
+    hud.add_child(health_label)
+
+    ammo_label = Label.new()
+    ammo_label.position = Vector2(1050, 30)
+    ammo_label.add_theme_font_size_override("font_size", 24)
+    hud.add_child(ammo_label)
+
+    crosshair = Label.new()
+    crosshair.text = "+"
+    crosshair.position = Vector2(632, 330)
+    crosshair.add_theme_font_size_override("font_size", 28)
+    hud.add_child(crosshair)
+
+    _add_hold_button(hud, "▲", Vector2(125, 510), "move_forward")
+    _add_hold_button(hud, "▼", Vector2(125, 600), "move_back")
+    _add_hold_button(hud, "◀", Vector2(35, 555), "move_left")
+    _add_hold_button(hud, "▶", Vector2(215, 555), "move_right")
 
     var fire := Button.new()
     fire.text = "ATEŞ"
-    fire.position = Vector2(1080, 560)
+    fire.position = Vector2(1080, 545)
     fire.size = Vector2(150, 100)
     fire.add_theme_font_size_override("font_size", 24)
     fire.button_down.connect(func(): player.touch_fire = true)
@@ -113,14 +134,14 @@ func _build_hud() -> void:
 
     var reload := Button.new()
     reload.text = "ŞARJÖR"
-    reload.position = Vector2(930, 590)
+    reload.position = Vector2(930, 585)
     reload.size = Vector2(130, 70)
     reload.pressed.connect(func(): player.reload())
     hud.add_child(reload)
 
     var hint := Label.new()
-    hint.position = Vector2(28, 680)
-    hint.text = "MOBİL: yön tuşları + ATEŞ | PC: WASD + fare"
+    hint.position = Vector2(28, 675)
+    hint.text = "SOL: hareket • SAĞ EKRAN: nişan • ATEŞ • ŞARJÖR"
     hint.add_theme_font_size_override("font_size", 16)
     hud.add_child(hint)
 
@@ -133,6 +154,12 @@ func _add_hold_button(hud: CanvasLayer, text: String, pos: Vector2, action: Stri
     button.button_down.connect(func(): Input.action_press(action))
     button.button_up.connect(func(): Input.action_release(action))
     hud.add_child(button)
+
+func _on_player_hud_changed(health: int, ammo: int, reserve: int) -> void:
+    if is_instance_valid(health_label):
+        health_label.text = "CAN %d" % health
+    if is_instance_valid(ammo_label):
+        ammo_label.text = "%02d / %02d" % [ammo, reserve]
 
 func _on_enemy_died() -> void:
     score += 100
