@@ -15,11 +15,9 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: barichello/godot-ci:4.3
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Normalize Godot source before export
         shell: sh
         run: |
@@ -42,7 +40,6 @@ jobs:
           grep -q 'var map_open: bool =' scripts/game_polish_manager.gd
           grep -q '\[node name="GamePolishManager" type="Node" parent="\."\]' main.tscn
           grep -q '\[node name="UpdateManager" type="Node" parent="\."\]' main.tscn
-
       - name: Prepare Android SDK
         shell: sh
         run: |
@@ -51,7 +48,6 @@ jobs:
           printf '%s\n' 'count=0' > "$HOME/.android/repositories.cfg"
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager 'platform-tools' 'platforms;android-34' 'build-tools;34.0.0'
-
       - name: Configure Godot 4.3 Android editor settings
         shell: sh
         run: |
@@ -59,19 +55,16 @@ jobs:
           mkdir -p "$HOME/.config/godot"
           cat > "$HOME/.config/godot/editor_settings-4.tres" <<EOF
           [gd_resource type="EditorSettings" format=3]
-
           [resource]
           export/android/android_sdk_path = "$ANDROID_SDK_ROOT"
           export/android/java_sdk_path = "/opt/java/openjdk"
           EOF
-
       - name: Build OTA Android plugin
         shell: sh
         run: |
           set -eu
           cd android_ota
           gradle wrapper --gradle-version 8.2 --distribution-type bin
-
       - name: Compile OTA plugin AAR
         shell: sh
         run: |
@@ -79,26 +72,22 @@ jobs:
           cd android_ota
           ./gradlew :plugin:assembleRelease --no-daemon
           test -f plugin/build/outputs/aar/OperasyonTurkiyeOTA-release.aar
-
       - name: Prepare Godot export templates
         shell: sh
         run: |
           set -eu
           mkdir -p "$HOME/.local/share/godot/export_templates/4.3.stable"
           if [ ! -f "$HOME/.local/share/godot/export_templates/4.3.stable/android_debug.apk" ]; then
-            curl -L --fail --retry 3 -o /tmp/godot_export_templates.tpz \
-              https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz
+            curl -L --fail --retry 3 -o /tmp/godot_export_templates.tpz https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz
             unzip -q -o /tmp/godot_export_templates.tpz -d /tmp/godot_templates
             cp -r /tmp/godot_templates/templates/* "$HOME/.local/share/godot/export_templates/4.3.stable/"
           fi
           test -f "$HOME/.local/share/godot/export_templates/4.3.stable/android_debug.apk"
-
       - name: Set release version
         shell: sh
         run: |
           set -eu
           sed -i "s/CURRENT_VERSION := \"[0-9.]*\"/CURRENT_VERSION := \"0.1.${GITHUB_RUN_NUMBER}\"/" scripts/update_manager.gd
-
       - name: Install Godot Android Gradle build template
         shell: sh
         run: |
@@ -106,11 +95,9 @@ jobs:
           godot --headless --path . --editor --install-android-build-template --quit
           test -d android/build
           test -f android/build.gradle
-
       - name: Import project
         shell: sh
         run: godot --headless --path . --editor --import --quit
-
       - name: Validate Android OTA export setup
         shell: sh
         run: |
@@ -119,14 +106,12 @@ jobs:
           test -f android/build.gradle
           grep -q 'com.operasyonturkiye.ota.OperasyonTurkiyeFileProvider' android_ota/plugin/src/main/AndroidManifest.xml
           grep -q 'ota.fileprovider' android_ota/plugin/src/main/AndroidManifest.xml
-
       - name: Gameplay smoke test
         shell: sh
         run: |
           set -eu
           godot --headless --path . --editor --quit
           godot --headless --path . --quit-after 3
-
       - name: Build debug APK
         shell: sh
         run: |
@@ -134,7 +119,6 @@ jobs:
           mkdir -p build
           godot --headless --path . --export-debug 'Android' build/OperasyonTurkiye-debug.apk
           test -s build/OperasyonTurkiye-debug.apk
-
       - name: Verify APK
         shell: sh
         run: |
@@ -142,13 +126,11 @@ jobs:
           file build/OperasyonTurkiye-debug.apk
           unzip -tq build/OperasyonTurkiye-debug.apk
           test "$(stat -c%s build/OperasyonTurkiye-debug.apk)" -gt 100000
-
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: OperasyonTurkiye-debug-apk
           path: build/OperasyonTurkiye-debug.apk
-
       - name: Publish GitHub release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
