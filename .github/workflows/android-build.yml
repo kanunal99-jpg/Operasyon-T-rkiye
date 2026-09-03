@@ -93,6 +93,7 @@ jobs:
           grep -q 'keystore/debug="/root/debug.keystore"' export_presets.cfg
           grep -q 'keystore/debug_user="androiddebugkey"' export_presets.cfg
           grep -q 'keystore/debug_password="android"' export_presets.cfg
+          grep -q 'permissions/internet=true' export_presets.cfg
           grep -q 'textures/vram_compression/import_etc2_astc=true' project.godot
           test -f ~/.config/godot/editor_settings-4.3.tres
           grep -q 'export/android/android_sdk_path = "/usr/lib/android-sdk"' ~/.config/godot/editor_settings-4.3.tres
@@ -118,10 +119,14 @@ jobs:
           VERSION_NAME="0.1.${GITHUB_RUN_NUMBER}"
           sed -i "s/version\/code=[0-9]*/version\/code=${GITHUB_RUN_NUMBER}/" export_presets.cfg
           sed -i "s/version\/name=\"[^\"]*\"/version\/name=\"${VERSION_NAME}\"/" export_presets.cfg
+          sed -i "s/const CURRENT_VERSION := \"[^\"]*\"/const CURRENT_VERSION := \"${VERSION_NAME}\"/" scripts/update_manager.gd
           grep -q "version/code=${GITHUB_RUN_NUMBER}" export_presets.cfg
           grep -q "version/name=\"${VERSION_NAME}\"" export_presets.cfg
+          grep -q "permissions/internet=true" export_presets.cfg
+          grep -q "const CURRENT_VERSION := \"${VERSION_NAME}\"" scripts/update_manager.gd
           echo "VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
           echo "Release version: ${VERSION_NAME}"
+          echo "Updater version: ${VERSION_NAME}"
 
       - name: Build debug APK
         run: |
