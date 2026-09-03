@@ -134,7 +134,7 @@ func _physics_process(delta: float) -> void:
     else: lost_target_timer += delta
 
     var mission := _get_defense_context()
-    var defending := mission != null and mission.get("objective_type") == "DEFEND" and mission.get("active")
+    var defending: bool = mission != null and mission.get("objective_type") == "DEFEND" and mission.get("active")
     if defending:
         defense_active = true; defense_target = _get_objective_position()
     var objective_distance := global_position.distance_to(defense_target) if defense_active else 9999.0
